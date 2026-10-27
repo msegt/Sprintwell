@@ -32,6 +32,7 @@ export interface TeamsTable {
   settings: string;
   created_at: string;
   created_by: string;
+  class_id: string | null;
 }
 
 export interface MembershipsTable {
@@ -155,6 +156,36 @@ export interface OauthStatesTable {
   created_at: string;
 }
 
+export interface ClassesTable {
+  id: string;
+  name: string;
+  staff_code: string;
+  settings: string;
+  created_by: string;
+  created_at: string;
+}
+
+export interface ClassStaffTable {
+  class_id: string;
+  user_id: string;
+  role: string;
+  added_at: string;
+}
+
+export interface ActivityTable {
+  id: string;
+  team_id: string;
+  user_id: string | null;
+  at: string;
+  /** 'sprintwell' or 'gitlab'. */
+  source: string;
+  kind: string;
+  summary: string;
+  url: string;
+  /** Unique key that stops the same thing being logged twice (e.g. a GitLab event id). */
+  dedupe: string | null;
+}
+
 export interface Database {
   users: UsersTable;
   sessions: SessionsTable;
@@ -169,4 +200,7 @@ export interface Database {
   meetings: MeetingsTable;
   gitlab_accounts: GitlabAccountsTable;
   oauth_states: OauthStatesTable;
+  classes: ClassesTable;
+  class_staff: ClassStaffTable;
+  activity: ActivityTable;
 }

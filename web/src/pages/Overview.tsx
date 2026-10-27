@@ -95,6 +95,23 @@ export function OverviewPage() {
 
       <HowTo id="overview" guide={PAGE_GUIDES.overview} />
 
+      {snap.team.classInfo && snap.team.classInfo.resources.length > 0 && (
+        <section className="card" aria-labelledby="resources-h">
+          <h2 id="resources-h">Course resources</h2>
+          <p className="small muted">Shared by the teaching staff of {snap.team.classInfo.name}.</p>
+          <ul className="guide-links">
+            {snap.team.classInfo.resources.map((r) => (
+              <li key={r.url}>
+                <a href={r.url} target="_blank" rel="noopener noreferrer">
+                  {r.title}
+                  <span className="sr-only"> (opens in a new tab)</span> <Icon name="external" size={12} />
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <div className="grid-2">
         <section className="card" aria-labelledby="live-heading">
           <h2 id="live-heading">Happening now</h2>

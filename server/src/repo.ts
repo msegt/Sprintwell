@@ -1,4 +1,5 @@
 import {
+  DEFAULT_CLASS_SETTINGS,
   DEFAULT_TEAM_SETTINGS,
   LIMITS,
   STARTER_AGREEMENT,
@@ -6,6 +7,7 @@ import {
   STARTER_DOR,
   type ActionDTO,
   type CapacityRow,
+  type ClassSettings,
   type CharterItemDTO,
   type CharterKind,
   readinessProblems,
@@ -266,15 +268,16 @@ export class Repo {
 
   // ---------------------------------------------------------------- teams
 
-  async createTeam(userId: string, name: string, starterCharter: boolean): Promise<string> {
+  /** Creates a team. With a class, the creator (teaching staff) is not a member: the first student to join becomes its admin. */
+  async createTeam(userId: string, name: string, starterCharter: boolean, classId: string | null = null): Promise<string> {
     const id = newId();
     const ts = now();
     await this.tx(async (trx) => {
       await trx
         .insertInto('teams')
-        .values({ id, name, invite_code: newInviteCode(), settings: JSON.stringify(DEFAULT_TEAM_SETTINGS), created_at: ts, created_by: userId })
+        .values({ id, name, invite_code: newInviteCode(), settings: JSON.stringify(DEFAULT_TEAM_SETTINGS), created_at: ts, created_by: userId, class_id: classId })
         .execute();
-      await trx.insertInto('memberships').values({ team_id: id, user_id: userId, role: 'admin', joined_at: ts }).execute();
+      if (!classId) await trx.insertInto('memberships').values({ team_id: id, user_id: userId, role: 'admin', joined_at: ts }).execute();
       if (starterCharter) {
         const rows = [
           ...STARTER_AGREEMENT.map((text, i) => ({ kind: 'agreement', text, position: i })),
@@ -306,6 +309,30 @@ export class Repo {
     return (row?.role as TeamRole) ?? null;
   }
 
+  /** Membership role, or 'coach' for teaching staff of the team's class. */
+  async access(teamId: string, userId: string): Promise<TeamRole | null> {
+    const role = await this.membership(teamId, userId);
+    if (role) return role;
+    const staff = await this.db
+      .selectFrom('teams as t')
+      .innerJoin('class_staff as cs', 'cs.class_id', 't.class_id')
+      .select('cs.role')
+      .where('t.id', '=', teamId)
+      .where('cs.user_id', '=', userId)
+      .executeTakeFirst();
+    return staff ? 'coach' : null;
+  }
+
+  private async classOfTeam(teamId: string): Promise<{ id: string; name: string; settings: ClassSettings } | null> {
+    const row = await this.db
+      .selectFrom('teams as t')
+      .innerJoin('classes as c', 'c.id', 't.class_id')
+      .select(['c.id', 'c.name', 'c.settings'])
+      .where('t.id', '=', teamId)
+      .executeTakeFirst();
+    return row ? { id: row.id, name: row.name, settings: { ...DEFAULT_CLASS_SETTINGS, ...parseJson<Partial<ClassSettings>>(row.settings, {}) } } : null;
+  }
+
   async invitePreview(code: string): Promise<{ teamId: string; teamName: string; memberCount: number } | null> {
     const team = await this.db.selectFrom('teams').select(['id', 'name']).where('invite_code', '=', code.trim().toLowerCase()).executeTakeFirst();
     if (!team) return null;
@@ -319,7 +346,23 @@ export class Repo {
     const existing = await this.membership(preview.teamId, userId);
     if (!existing) {
       if (preview.memberCount >= 100) throw badRequest('This team is full (100 members).');
-      await this.db.insertInto('memberships').values({ team_id: preview.teamId, user_id: userId, role: 'member', joined_at: now() }).execute();
+      const cls = await this.classOfTeam(preview.teamId);
+      if (cls) {
+        if (cls.settings.requireGitlab) {
+          const linked = await this.db.selectFrom('gitlab_accounts').select('user_id').where('user_id', '=', userId).executeTakeFirst();
+          if (!linked) throw new HttpError(403, `${cls.name} asks everyone to sign in with GitLab before joining a team.`, { code: 'gitlab_required' });
+        }
+        const other = await this.db
+          .selectFrom('memberships as m')
+          .innerJoin('teams as t', 't.id', 'm.team_id')
+          .select('t.name')
+          .where('m.user_id', '=', userId)
+          .where('t.class_id', '=', cls.id)
+          .executeTakeFirst();
+        if (other) throw badRequest(`You are already in ${other.name} in ${cls.name}. Ask your teacher if you need to change team.`);
+      }
+      const hasAdmin = await this.db.selectFrom('memberships').select('user_id').where('team_id', '=', preview.teamId).where('role', '=', 'admin').executeTakeFirst();
+      await this.db.insertInto('memberships').values({ team_id: preview.teamId, user_id: userId, role: hasAdmin ? 'member' : 'admin', joined_at: now() }).execute();
     }
     return preview.teamId;
   }
@@ -334,6 +377,8 @@ export class Repo {
     const team = await this.db.selectFrom('teams').select('settings').where('id', '=', teamId).executeTakeFirst();
     if (!team) throw notFound();
     const settings = { ...DEFAULT_TEAM_SETTINGS, ...parseJson<Partial<TeamSettings>>(team.settings, {}), ...(patch.settings ?? {}) };
+    // Class teams always keep the Definition of Ready gate.
+    if (await this.classOfTeam(teamId)) settings.enforceReady = true;
     await this.db
       .updateTable('teams')
       .set({ ...(patch.name ? { name: patch.name } : {}), settings: JSON.stringify(settings) })
@@ -365,9 +410,10 @@ export class Repo {
       if (!role) throw notFound('Member not found');
       await trx.deleteFrom('memberships').where('team_id', '=', teamId).where('user_id', '=', userId).execute();
       const remaining = await trx.selectFrom('memberships').select(['user_id', 'role']).where('team_id', '=', teamId).orderBy('joined_at').execute();
-      if (remaining.length === 0) {
+      const inClass = await trx.selectFrom('teams').select('class_id').where('id', '=', teamId).executeTakeFirst();
+      if (remaining.length === 0 && !inClass?.class_id) {
         await trx.deleteFrom('teams').where('id', '=', teamId).execute();
-      } else if (!remaining.some((m) => m.role === 'admin')) {
+      } else if (remaining.length > 0 && !remaining.some((m) => m.role === 'admin')) {
         await trx.updateTable('memberships').set({ role: 'admin' }).where('team_id', '=', teamId).where('user_id', '=', remaining[0]!.user_id).execute();
       }
     });
@@ -381,14 +427,18 @@ export class Repo {
     const t = await this.db.selectFrom('teams').selectAll().where('id', '=', teamId).executeTakeFirst();
     if (!t) throw notFound('Team not found');
     const members = await this.members(teamId);
+    const cls = t.class_id ? await this.classOfTeam(teamId) : null;
+    const settings = { ...DEFAULT_TEAM_SETTINGS, ...parseJson<Partial<TeamSettings>>(t.settings, {}) };
+    if (cls) settings.enforceReady = true;
     return {
       id: t.id,
       name: t.name,
       inviteCode: t.invite_code,
       createdAt: t.created_at,
-      settings: { ...DEFAULT_TEAM_SETTINGS, ...parseJson<Partial<TeamSettings>>(t.settings, {}) },
+      settings,
       members,
       myRole: viewerRole,
+      classInfo: cls ? { id: cls.id, name: cls.name, requireGitlab: cls.settings.requireGitlab, resources: cls.settings.resources } : null,
     };
   }
 

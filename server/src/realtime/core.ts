@@ -13,9 +13,11 @@ export interface ConnState {
   teams: string[];
   /** meetingId -> teamId */
   meetings: Record<string, string>;
+  /** Teams this connection watches as teaching staff: they do not count as present in events. */
+  watching?: string[];
 }
 
-export const EMPTY_CONN_STATE: ConnState = { userId: null, teams: [], meetings: {} };
+export const EMPTY_CONN_STATE: ConnState = { userId: null, teams: [], meetings: {}, watching: [] };
 
 /** A transport-neutral view of one WebSocket connection. */
 export interface Connection {
@@ -117,11 +119,11 @@ export class Realtime implements Broadcaster {
     switch (msg.t) {
       case 'sub': {
         const teamId = msg.teamId;
-        if (typeof teamId !== 'string' || (this.teamScope && teamId !== this.teamScope) || !(await this.repo.membership(teamId, userId))) {
-          return this.send(conn, { t: 'error', error: 'Not a member of that team' });
-        }
+        const access = typeof teamId === 'string' && !(this.teamScope && teamId !== this.teamScope) ? await this.repo.access(teamId, userId) : null;
+        if (!access) return this.send(conn, { t: 'error', error: 'Not a member of that team' });
         const s = conn.getState();
-        if (!s.teams.includes(teamId)) conn.setState({ ...s, teams: [...s.teams, teamId] });
+        const watching = s.watching ?? [];
+        conn.setState({ ...s, teams: s.teams.includes(teamId) ? s.teams : [...s.teams, teamId], watching: access === 'coach' ? [...new Set([...watching, teamId])] : watching.filter((t) => t !== teamId) });
         return;
       }
       case 'unsub': {
@@ -134,9 +136,12 @@ export class Realtime implements Broadcaster {
         try {
           const teamId = await this.manager.teamOf(meetingId);
           if (this.teamScope && teamId !== this.teamScope) throw new Error('wrong team');
-          if (!(await this.repo.membership(teamId, userId))) throw new Error('forbidden');
+          const access = await this.repo.access(teamId, userId);
+          if (!access) throw new Error('forbidden');
           const s = conn.getState();
-          conn.setState({ ...s, meetings: { ...s.meetings, [meetingId]: teamId } });
+          const watching = s.watching ?? [];
+          conn.setState({ ...s, meetings: { ...s.meetings, [meetingId]: teamId }, watching: access === 'coach' ? [...new Set([...watching, teamId])] : watching });
+          if (access !== 'coach') await this.manager.recordAttendance(meetingId, userId);
           // Send the joiner a view straight away, then tell everyone about the new presence.
           this.send(conn, { t: 'meeting', view: await this.manager.viewFor(meetingId, userId) });
           await this.manager.presenceChanged(meetingId);
@@ -182,8 +187,15 @@ export class Realtime implements Broadcaster {
     return this.store.all().filter((c) => meetingId in c.getState().meetings);
   }
 
+  /** Team members connected to an event. Teaching staff watching it are not counted. */
   online(meetingId: string): string[] {
-    return [...new Set(this.inRoom(meetingId).map((c) => c.getState().userId).filter((id): id is string => !!id))];
+    const ids = this.inRoom(meetingId)
+      .filter((c) => {
+        const s = c.getState();
+        return !(s.watching ?? []).includes(s.meetings[meetingId] ?? '');
+      })
+      .map((c) => c.getState().userId);
+    return [...new Set(ids.filter((id): id is string => !!id))];
   }
 
   broadcastMeeting(meetingId: string, view: (userId: string) => MeetingView): void {

@@ -2,6 +2,7 @@ import { LIMITS } from '@sprintwell/shared';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { GitlabButton } from '../components/GitlabButton';
+import { CreateClass, useMyClasses } from './Classes';
 import { Button, Field, Icon } from '../components/ui';
 import { api, setToken } from '../lib/api';
 import { useAction, useMe, usePageTitle } from '../lib/hooks';
@@ -75,6 +76,7 @@ function HeroArt() {
 
 export function HomePage() {
   const { user, teams, loading } = useMe();
+  const { classes } = useMyClasses();
   usePageTitle('');
   if (loading) return <div className="page" aria-busy="true" />;
   return (
@@ -121,6 +123,28 @@ export function HomePage() {
               ))}
             </ul>
           )}
+          {classes.length > 0 && (
+            <>
+              <h2>Classes you teach</h2>
+              <ul className="team-list">
+                {classes.map((c) => (
+                  <li key={c.id}>
+                    <Link to={`/c/${c.id}`} className="team-tile with-initial">
+                      <span className="team-initial" aria-hidden="true">
+                        <Icon name="book" size={18} />
+                      </span>
+                      <span className="team-tile-name">{c.name}</span>
+                      <span className="muted small">
+                        {c.teamCount} team{c.teamCount === 1 ? '' : 's'} · {c.role === 'owner' ? 'owner' : 'teaching staff'}
+                      </span>
+                      <Icon name="arrow" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <CreateClass />
         </section>
       )}
 
