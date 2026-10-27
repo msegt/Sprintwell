@@ -160,3 +160,5 @@ The Node version keeps live event state in one process, so run a single instance
 ## Before using it with students
 
 Check your institution's rules for third-party tools that process student data. In the UK this often means a data protection impact assessment. On Cloudflare, the data sits in your Cloudflare account, in the region you chose when creating the D1 database. Whoever runs the service is responsible for the privacy notice.
+
+With classes, the activity log and GitLab sign-in, Sprintwell stores more about each student: their GitLab user id and username, encrypted GitLab tokens, and a timestamped log of what they did (including GitLab merge requests, reviews and commits once a team links its project). Teaching staff of a class can see and download all of it. Tell students before they join, explain how the log will (and will not) be used in assessment, and check whether your GitLab administrators allow third-party OAuth applications.
