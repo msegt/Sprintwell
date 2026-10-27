@@ -1,0 +1,19 @@
+# Render Blueprint (untested template): a Docker web service using an external
+# PostgreSQL database such as Neon. Set DATABASE_URL in the Render dashboard.
+services:
+  - type: web
+    name: sprintwell
+    runtime: docker
+    plan: starter
+    healthCheckPath: /healthz
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: TRUST_PROXY
+        value: 'true'
+      - key: PUBLIC_URL
+        sync: false
+      - key: DONATION_URL
+        sync: false
+      - key: SOURCE_URL
+        sync: false

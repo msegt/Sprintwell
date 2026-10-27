@@ -1,0 +1,29 @@
+# Local production-like run with PostgreSQL:  docker compose up --build
+# Then open http://localhost:3000
+services:
+  app:
+    build: .
+    ports:
+      - '3000:3000'
+    environment:
+      DATABASE_URL: postgres://sprintwell:sprintwell@db:5432/sprintwell
+      PUBLIC_URL: http://localhost:3000
+      DONATION_URL: ${DONATION_URL:-}
+      SOURCE_URL: ${SOURCE_URL:-}
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: sprintwell
+      POSTGRES_PASSWORD: sprintwell
+      POSTGRES_DB: sprintwell
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U sprintwell']
+      interval: 5s
+      retries: 10
+volumes:
+  pgdata:

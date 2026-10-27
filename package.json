@@ -1,0 +1,35 @@
+{
+  "name": "sprintwell",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sprintwell: real-time tools for Agile teams to run their own Scrum events, planning poker and retrospectives.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "server",
+    "web"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "npm run dev -w server & npm run dev -w web",
+    "build": "npm run build -w web && npm run build -w server",
+    "start": "npm run start -w server",
+    "test": "npm test -w shared && npm test -w server",
+    "test:pg": "npm run test:pg -w server",
+    "test:e2e": "playwright test",
+    "typecheck": "npm run typecheck -w shared && npm run typecheck -w server && npm run typecheck -w web",
+    "check": "npm run typecheck && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.5",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}
