@@ -128,20 +128,29 @@ export function registerApi(app: ApiRouter, deps: Deps): void {
     const body = parse(gitlabStartBody, req.body);
     const token = bearer(req);
     const current = token ? await repo.userForToken(token) : null;
-    return { url: await gitlab.start({ purpose: body.purpose, userId: current?.id ?? null, returnTo: body.returnTo, origin: req.origin }) };
+    return gitlab.start({ purpose: body.purpose, userId: current?.id ?? null, returnTo: body.returnTo, origin: req.origin });
   });
 
   app.post('/api/auth/gitlab/callback', strictLimit, async (req) => {
     const body = parse(gitlabCallbackBody, req.body);
     const token = bearer(req);
     const current = token ? await repo.userForToken(token) : null;
-    const result = await gitlab.finish({ code: body.code, state: body.state, origin: req.origin, currentUserId: current?.id ?? null });
+    const result = await gitlab.finish({ code: body.code, state: body.state, nonce: body.nonce, origin: req.origin, currentUserId: current?.id ?? null });
     for (const t of await repo.teamsForUser(result.user.id)) changed(t.id);
     return result;
   });
 
   app.delete('/api/me/gitlab', async (req) => {
     const u = await user(req);
+    const requiring = await repo.db
+      .selectFrom('memberships as m')
+      .innerJoin('teams as t', 't.id', 'm.team_id')
+      .innerJoin('classes as c', 'c.id', 't.class_id')
+      .select(['c.name', 'c.settings'])
+      .where('m.user_id', '=', u.id)
+      .execute();
+    const blocking = requiring.find((c) => (JSON.parse(c.settings) as { requireGitlab?: boolean }).requireGitlab !== false);
+    if (blocking) throw badRequest(`${blocking.name} needs you to stay signed in with GitLab while you are in one of its teams.`);
     await gitlab.disconnect(u.id);
     for (const t of await repo.teamsForUser(u.id)) changed(t.id);
     return { ok: true };
@@ -257,7 +266,14 @@ export function registerApi(app: ApiRouter, deps: Deps): void {
 
   app.delete('/api/teams/:teamId', async (req) => {
     const { teamId } = req.params as Params;
-    await admin(req, teamId!);
+    const m = await member(req, teamId!, 'read');
+    // Class teams hold students' evidence: only the class owner may delete them.
+    const classId = await classes.teamClassId(teamId!);
+    if (classId) {
+      if ((await classes.role(classId, m.user.id)) !== 'owner') throw forbidden('Only the owner of the class can delete a class team.');
+    } else if (m.role !== 'admin') {
+      throw forbidden('Only team admins can do that.');
+    }
     const members = await repo.members(teamId!);
     await repo.deleteTeam(teamId!);
     realtime.forgetTeam(teamId!);
@@ -625,8 +641,10 @@ export function registerApi(app: ApiRouter, deps: Deps): void {
     const u = await user(req);
     const { classId } = req.params as Params;
     const before = await classTeamIds(classId!);
+    const staff = (await classes.get(classId!, u.id)).staff;
     const deleted = await classes.remove(classId!, u.id);
     for (const t of deleted) realtime.forgetTeam(t);
+    for (const t of before) for (const st of staff) realtime.revoke(t, st.userId);
     for (const t of before) changed(t);
     return { ok: true, deletedTeams: deleted.length };
   });

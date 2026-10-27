@@ -158,6 +158,7 @@ export interface OauthStatesTable {
   user_id: string | null;
   return_to: string;
   created_at: string;
+  nonce_hash: string | null;
 }
 
 export interface ClassesTable {
@@ -204,6 +205,7 @@ export interface TeamGitlabTable {
   events_after: string | null;
   /** 'weight', 'label' or 'unknown': where estimates go in this GitLab. */
   estimate_field: string;
+  issues_after: string | null;
 }
 
 export interface Database {

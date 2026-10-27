@@ -1,6 +1,7 @@
 import type { UserDTO } from '@sprintwell/shared';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
+import { takeNonce } from '../components/GitlabButton';
 import { api, setToken } from '../lib/api';
 import { useMe, usePageTitle } from '../lib/hooks';
 
@@ -22,7 +23,12 @@ export function GitlabCallbackPage() {
       setError(params.get('error') === 'access_denied' ? 'You cancelled signing in with GitLab.' : 'GitLab did not complete the sign-in.');
       return;
     }
-    api<{ token: string | null; user: UserDTO; returnTo: string }>('POST', '/api/auth/gitlab/callback', { code, state }).then(
+    const nonce = takeNonce(state);
+    if (!nonce) {
+      setError('This sign-in was started in a different browser, or this browser blocks site storage. Please start again from Sprintwell in this browser.');
+      return;
+    }
+    api<{ token: string | null; user: UserDTO; returnTo: string }>('POST', '/api/auth/gitlab/callback', { code, state, nonce }).then(
       async (r) => {
         if (r.token) setToken(r.token);
         await refresh();

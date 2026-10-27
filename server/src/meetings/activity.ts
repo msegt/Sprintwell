@@ -18,8 +18,11 @@ const q = (s: string) => `“${s.length > 120 ? `${s.slice(0, 117)}…` : s}”`
  *
  * Privacy rules: nothing is recorded that would reveal what the team keeps
  * hidden or anonymous. Poker votes are logged as "voted" without the value;
- * cards in anonymous retrospectives, retrospective dot votes, the ESVP safety
- * check and the closing rating are never attributed to anyone.
+ * retrospective cards are logged without their text (cards are hidden while
+ * people write, and the log is visible straight away) and not at all in
+ * anonymous retrospectives; check-ins, dot votes, the ESVP safety check and
+ * the closing rating are never logged, because their timing could reveal
+ * who chose what.
  */
 export function describeCommand(before: MeetingRecord, after: MeetingRecord, actorId: string, cmd: { type: string } & Record<string, unknown>): Omit<ActivityEntry, 'teamId'>[] {
   const kind = KIND_OF[before.kind];
@@ -51,8 +54,10 @@ export function describeCommand(before: MeetingRecord, after: MeetingRecord, act
 
   if (before.kind === 'retro') {
     const anonymous = s.anonymous === true;
-    if (cmd.type === 'checkin') return [entry(`checked in to ${title}`, `checkin:${before.id}:${actorId}`)];
-    if (cmd.type === 'addCard' && !anonymous) return [entry(`wrote a retrospective card: ${q(String(cmd.text))}`)];
+    if (cmd.type === 'addCard' && !anonymous) {
+      const column = ((s.columns ?? []) as { id: string; title: string }[]).find((c) => c.id === cmd.columnId)?.title;
+      return [entry(`wrote a retrospective card${column ? ` in “${column}”` : ''} in ${title}`)];
+    }
     if (cmd.type === 'addCard' && anonymous) return [];
     if (cmd.type === 'note') return [entry(`took discussion notes in ${title}`, `note:${before.id}:${String(cmd.topicId)}:${actorId}`)];
     if (cmd.type === 'group' || cmd.type === 'renameGroup') return [entry(`helped group the cards in ${title}`, `group:${before.id}:${actorId}`)];

@@ -171,7 +171,7 @@ export const createMeetingBody = z.object({
 });
 
 export const gitlabStartBody = z.object({ purpose: z.enum(['signin', 'grant']).default('signin'), returnTo: z.string().max(300).default('/') });
-export const gitlabCallbackBody = z.object({ code: z.string().min(1).max(512), state: z.string().min(10).max(128) });
+export const gitlabCallbackBody = z.object({ code: z.string().min(1).max(512), state: z.string().min(10).max(128), nonce: z.string().min(10).max(128) });
 
 const resourceLink = z.object({ title: required(LIMITS.title), url: url.refine((v) => v !== '', 'Add a link') });
 

@@ -99,7 +99,7 @@ export function SettingsPage() {
             Leave team
           </ConfirmButton>
           )}
-          {isAdmin && (
+          {isAdmin && (!snap.team.classInfo || readOnly) && (
             <ConfirmButton
               confirmLabel="Delete the team and all its data for everyone"
               onConfirm={async () => {

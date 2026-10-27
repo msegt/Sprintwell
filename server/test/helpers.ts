@@ -220,5 +220,5 @@ export async function gitlabSignIn(s: TestServer, gitlab: MockGitlab, user: { id
   if (start.status !== 200) throw new Error(start.text);
   const r = await fetch(start.body.url as string, { redirect: 'manual' });
   const back = new URL(r.headers.get('location') ?? '');
-  return s.api('POST', '/api/auth/gitlab/callback', token, { code: back.searchParams.get('code'), state: back.searchParams.get('state') });
+  return s.api('POST', '/api/auth/gitlab/callback', token, { code: back.searchParams.get('code'), state: back.searchParams.get('state'), nonce: start.body.nonce });
 }
