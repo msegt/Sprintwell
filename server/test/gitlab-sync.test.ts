@@ -175,6 +175,21 @@ describe('GitLab project sync', () => {
     expect(project.issues.find((x) => x.iid === 2)!.weight).toBe(2);
   });
 
+  it('continues where it stopped when a project has more issues than one sync reads', async () => {
+    const { ada, teamId, web, project } = await setup();
+    const sameTime = at(30);
+    for (let iid = 10; iid < 260; iid++) {
+      project.issues.push({ id: project.id * 10_000 + iid, iid, title: `Bulk ${iid}`, description: null, state: 'opened', labels: [], weight: null, milestone: null, web_url: `${web}/-/issues/${iid}`, updated_at: sameTime });
+    }
+    await s.api('POST', `/api/teams/${teamId}/gitlab`, ada.token, { project: web });
+    const first = (await s.api('POST', `/api/teams/${teamId}/gitlab/sync`, ada.token)).body;
+    expect(first.partial).toBe(true);
+    let total = first.issuesCreated;
+    for (let i = 0; i < 4 && total < 252; i++) total += (await s.api('POST', `/api/teams/${teamId}/gitlab/sync`, ada.token)).body.issuesCreated;
+    expect(total).toBe(252);
+    expect((await stories(teamId, ada.token)).length).toBe(252);
+  });
+
   it('needs GitLab API access from the person syncing', async () => {
     const { ada, teamId, web } = await setup();
     await s.api('POST', `/api/teams/${teamId}/gitlab`, ada.token, { project: web });

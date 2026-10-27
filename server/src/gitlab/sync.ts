@@ -105,7 +105,7 @@ export class GitlabSync {
       if (e instanceof GitlabError && e.upstreamStatus === 404) throw badRequest('You need to be a member of that GitLab project to link it.');
       throw e;
     });
-    const values = { project_id: String(p.id), path: p.path_with_namespace, web_url: p.web_url, origin, linked_by: actorId, linked_at: now(), last_sync_at: null, events_after: null, estimate_field: 'unknown' };
+    const values = { project_id: String(p.id), path: p.path_with_namespace, web_url: p.web_url, origin, linked_by: actorId, linked_at: now(), last_sync_at: null, events_after: null, issues_after: null, estimate_field: 'unknown' };
     const db = this.repo.db;
     if (await db.selectFrom('team_gitlab').select('team_id').where('team_id', '=', teamId).executeTakeFirst()) {
       await db.updateTable('team_gitlab').set(values).where('team_id', '=', teamId).execute();
@@ -156,13 +156,20 @@ export class GitlabSync {
     }
 
     // ---- issues → backlog items (only those changed since the last sync)
-    const since = link.last_sync_at ? `&updated_after=${enc(new Date(Date.parse(link.last_sync_at) - 60_000).toISOString())}` : '';
+    // Cursor "<updated_after>|<page>": continue by time, or by page when many issues share a time.
+    const [cursorFrom, cursorPage] = (link.issues_after ?? '').split('|');
+    const issuesFrom = cursorFrom || link.last_sync_at;
+    const firstPage = Number(cursorPage) > 1 ? Number(cursorPage) : 1;
+    const since = issuesFrom ? `&updated_after=${enc(new Date(Date.parse(issuesFrom) - 60_000).toISOString())}` : '';
+    let issuesPartial = false;
+    let lastPage = firstPage;
     const issues: GlIssue[] = [];
-    for (let page = 1; page <= MAX_ISSUE_PAGES; page++) {
+    for (let page = firstPage; page < firstPage + MAX_ISSUE_PAGES; page++) {
+      lastPage = page;
       const { data, headers } = await gitlabApi<GlIssue[]>(this.gl, token, `/projects/${link.project_id}/issues?per_page=${PER_PAGE}&page=${page}&order_by=updated_at&sort=asc&scope=all${since}`, { what: 'read issues' });
       issues.push(...data);
       if (!headers.get('x-next-page')) break;
-      if (page === MAX_ISSUE_PAGES) result.partial = true;
+      if (page === firstPage + MAX_ISSUE_PAGES - 1) issuesPartial = result.partial = true;
     }
     const stories = await db.selectFrom('stories').selectAll().where('team_id', '=', teamId).where('gitlab_iid', 'is not', null).execute();
     const byIid = new Map(stories.map((s) => [Number(s.gitlab_iid), s]));
@@ -259,6 +266,8 @@ export class GitlabSync {
       .execute();
     const userByGitlab = new Map(members.map((m) => [m.gitlab_id, m.user_id]));
     const entries: ActivityEntry[] = [];
+    let eventsPartial = false;
+    let lastEventAt: string | null = null;
     for (let page = 1; page <= MAX_EVENT_PAGES; page++) {
       // GitLab's "after" is a date and exclusive, so ask from the day before; duplicates are ignored.
       const day = new Date(Date.parse(`${after}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
@@ -266,15 +275,28 @@ export class GitlabSync {
       for (const ev of data) {
         const entry = this.describeEvent(teamId, link.web_url, ev, userByGitlab);
         if (entry) entries.push(entry);
+        if (!lastEventAt || ev.created_at > lastEventAt) lastEventAt = ev.created_at;
       }
       if (!headers.get('x-next-page')) break;
-      if (page === MAX_EVENT_PAGES) result.partial = true;
+      if (page === MAX_EVENT_PAGES) eventsPartial = result.partial = true;
     }
     result.events = await logActivity(db, entries);
 
+    // Cursors: continue where this sync stopped if it could not read everything.
+    // (GitLab filters events by day, so a single day with more than 300 events cannot be read in full.)
+    const lastIssue = issues[issues.length - 1];
+    let issuesAfter = `${startedAt}|1`;
+    if (issuesPartial && lastIssue) {
+      const progressed = !issuesFrom || Date.parse(lastIssue.updated_at) - 60_000 > Date.parse(issuesFrom);
+      issuesAfter = progressed ? `${lastIssue.updated_at}|1` : `${issuesFrom}|${lastPage + 1}`;
+    }
     await db
       .updateTable('team_gitlab')
-      .set({ last_sync_at: startedAt, events_after: result.partial ? link.events_after : startedAt })
+      .set({
+        last_sync_at: startedAt,
+        issues_after: issuesAfter,
+        events_after: eventsPartial ? (lastEventAt ?? link.events_after) : startedAt,
+      })
       .where('team_id', '=', teamId)
       .execute();
     return result;
@@ -284,7 +306,7 @@ export class GitlabSync {
     const username = ev.author?.username ?? ev.author_username ?? 'someone';
     const userId = userByGitlab.get(String(ev.author_id)) ?? null;
     const who = userId ? '' : `@${username} `;
-    const base = { teamId, userId, source: 'gitlab' as const, dedupe: `gitlab:${web}:${ev.id}`, at: ev.created_at };
+    const base = { teamId, userId, source: 'gitlab' as const, dedupe: `gitlab:${teamId}:${web}:${ev.id}`, at: ev.created_at };
     const title = ev.target_title ? `“${ev.target_title}”` : '';
     const action = ev.action_name;
     if (ev.push_data) {

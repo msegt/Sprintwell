@@ -67,17 +67,36 @@ describe('Sign in with GitLab', () => {
     gitlab.login(glUser('Eve'));
     const start = await s.api('POST', '/api/auth/gitlab/start', p.token, { purpose: 'signin' });
     const back = new URL((await fetch(start.body.url, { redirect: 'manual' })).headers.get('location')!);
-    const body = { code: back.searchParams.get('code'), state: back.searchParams.get('state') };
+    const body = { code: back.searchParams.get('code'), state: back.searchParams.get('state'), nonce: start.body.nonce };
     expect((await s.api('POST', '/api/auth/gitlab/callback', p.token, body)).status).toBe(200);
     expect((await s.api('POST', '/api/auth/gitlab/callback', p.token, body)).status).toBe(400);
-    expect((await s.api('POST', '/api/auth/gitlab/callback', p.token, { code: 'x', state: 'nonexistent-state-value' })).status).toBe(400);
+    expect((await s.api('POST', '/api/auth/gitlab/callback', p.token, { code: 'x', state: 'nonexistent-state-value', nonce: 'whatever-nonce' })).status).toBe(400);
+  });
+
+  it('cannot be finished in someone else’s browser (account takeover and login CSRF)', async () => {
+    const victim = await person(s, 'Victim');
+    // The attacker starts signing in with their own GitLab account and stops at the callback…
+    gitlab.login(glUser('Attacker'));
+    const start = await s.api('POST', '/api/auth/gitlab/start', null, { purpose: 'signin' });
+    const back = new URL((await fetch(start.body.url, { redirect: 'manual' })).headers.get('location')!);
+    const stolen = { code: back.searchParams.get('code'), state: back.searchParams.get('state') };
+    // …then gets the victim to open the link. The victim's browser does not have the nonce.
+    const r = await s.api('POST', '/api/auth/gitlab/callback', victim.token, { ...stolen, nonce: 'not-the-right-nonce' });
+    expect(r.status).toBe(400);
+    // Even with the nonce, a sign-in started while signed out cannot upgrade someone's profile.
+    const start2 = await s.api('POST', '/api/auth/gitlab/start', null, { purpose: 'signin' });
+    const back2 = new URL((await fetch(start2.body.url, { redirect: 'manual' })).headers.get('location')!);
+    const again = await s.api('POST', '/api/auth/gitlab/callback', victim.token, { code: back2.searchParams.get('code'), state: back2.searchParams.get('state'), nonce: start2.body.nonce });
+    expect(again.status).toBe(400);
+    expect(again.body.error).toMatch(/signed in or out/);
+    expect((await s.api('GET', '/api/me', victim.token)).body.user.gitlab).toBeNull();
   });
 
   it('only redirects back to paths on this site', async () => {
     const start = await s.api('POST', '/api/auth/gitlab/start', null, { purpose: 'signin', returnTo: 'https://evil.example/' });
     gitlab.login(glUser('Redirect'));
     const back = new URL((await fetch(start.body.url, { redirect: 'manual' })).headers.get('location')!);
-    const r = await s.api('POST', '/api/auth/gitlab/callback', null, { code: back.searchParams.get('code'), state: back.searchParams.get('state') });
+    const r = await s.api('POST', '/api/auth/gitlab/callback', null, { code: back.searchParams.get('code'), state: back.searchParams.get('state'), nonce: start.body.nonce });
     expect(r.body.returnTo).toBe('/');
   });
 

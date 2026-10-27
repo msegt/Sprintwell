@@ -246,4 +246,13 @@ export const migrations: Record<string, Migration> = {
       await db.schema.alterTable('sprints').addColumn('gitlab_milestone_id', 'text').execute();
     },
   },
+
+  '006_oauth_nonce_sync_cursor': {
+    async up(db: Kysely<any>) {
+      // Ties a GitLab sign-in to the browser that started it.
+      await db.schema.alterTable('oauth_states').addColumn('nonce_hash', 'text').execute();
+      // Where the next issue import continues when one sync could not read everything.
+      await db.schema.alterTable('team_gitlab').addColumn('issues_after', 'text').execute();
+    },
+  },
 };

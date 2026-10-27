@@ -97,7 +97,7 @@ export function ActivityPage() {
           </p>
           <ul className="guide-tips">
             <li>Everyone in the team can see this log{snap.team.classInfo ? `, and so can the teaching staff of ${snap.team.classInfo.name}` : ''}.</li>
-            <li>Hidden or anonymous contributions are never attributed: Planning Poker votes are logged without the value, and anonymous retrospective cards, dot votes and the safety check are not logged at all.</li>
+            <li>Hidden or anonymous contributions are never attributed: Planning Poker votes are logged without the value, retrospective cards without their text, and anonymous cards, check-ins, dot votes and the safety check are not logged at all.</li>
             <li>It shows activity, not the quality or value of a contribution. Use it as evidence to support your own account of your work, not as a score.</li>
           </ul>
         </div>

@@ -90,7 +90,7 @@ export function PrivacyPage() {
           If a teacher created your team as part of a class, the class’s teaching staff can also see all of the team’s content and its activity log, read-only, and download it. Teams
           show the class name at the top of every page.
         </li>
-        <li>The activity log never records anonymous retrospective cards, dot votes, the safety check or the values of Planning Poker votes.</li>
+        <li>The activity log never records the text of retrospective cards, anonymous cards, check-ins, dot votes, the safety check or the values of Planning Poker votes.</li>
         <li>In anonymous retrospectives, other people never see who wrote a card. The server still records the author so you can edit your own cards.</li>
         <li>Planning Poker votes are hidden from everyone else until the facilitator reveals them.</li>
       </ul>

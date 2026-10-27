@@ -78,6 +78,20 @@ describe('classes', () => {
     expect((await s.api('GET', `/api/teams/${teamIds[0]}`, teacher.token)).status).toBe(200);
   });
 
+  it('protects class teams: only the class owner deletes them, and students stay signed in with GitLab', async () => {
+    const { teacher, cls, teamIds } = await classWithTeams(['Protected']);
+    const ada = await student('Ada');
+    await s.api('POST', '/api/teams/join', ada.token, { code: cls.teams[0].inviteCode });
+    const colleague = await person(s, 'Colleague');
+    await s.api('POST', '/api/classes/join-staff', colleague.token, { code: cls.staffCode });
+    expect((await s.api('DELETE', `/api/teams/${teamIds[0]}`, ada.token)).status).toBe(403);
+    expect((await s.api('DELETE', `/api/teams/${teamIds[0]}`, colleague.token)).status).toBe(403);
+    const disconnect = await s.api('DELETE', '/api/me/gitlab', ada.token);
+    expect(disconnect.status).toBe(400);
+    expect(disconnect.body.error).toMatch(/stay signed in with GitLab/);
+    expect((await s.api('DELETE', `/api/teams/${teamIds[0]}`, teacher.token)).status).toBe(200);
+  });
+
   it('keeps the Definition of Ready gate on in class teams', async () => {
     const { cls, teamIds } = await classWithTeams(['Gate team']);
     const ada = await student('Ada');
@@ -177,7 +191,8 @@ describe('activity log', () => {
       await a.cmd(id, { type: 'addCard', columnId: col.columns[0]!.id, text: id === anon ? 'secret card' : 'open card' });
     }
     const log = (await s.api('GET', `/api/teams/${teamId}/activity`, ada.token)).body.entries.map((e: { summary: string }) => e.summary);
-    expect(log.some((x: string) => x.includes('secret card'))).toBe(false);
-    expect(log.some((x: string) => x.includes('open card'))).toBe(true);
+    // Card text is never logged (cards are hidden while people write); anonymous cards are not logged at all.
+    expect(log.some((x: string) => x.includes('secret card') || x.includes('open card'))).toBe(false);
+    expect(log.filter((x: string) => x.startsWith('wrote a retrospective card')).length).toBe(1);
   });
 });
