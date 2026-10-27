@@ -1,0 +1,17 @@
+/* Unsaved-changes guard inside dialogs. */
+.discard-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  color: var(--warn);
+  border: 1px solid currentColor;
+}
+.discard-bar p {
+  margin: 0;
+}

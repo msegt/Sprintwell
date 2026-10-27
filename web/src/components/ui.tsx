@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ComponentProps, type ReactNode } from 'react';
+import '../styles/modal-guard.css';
 import { useNotice } from '../lib/hooks';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -10,7 +11,7 @@ export function Button({
   children,
   className = '',
   ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; small?: boolean; busy?: boolean }) {
+}: ComponentProps<'button'> & { variant?: Variant; small?: boolean; busy?: boolean }) {
   return (
     <button type="button" {...rest} className={`btn btn-${variant}${small ? ' btn-small' : ''} ${className}`} disabled={rest.disabled || busy} aria-busy={busy || undefined}>
       {children}
@@ -18,34 +19,102 @@ export function Button({
   );
 }
 
-/** Accessible modal built on the native <dialog> element (focus trapping and Esc for free). */
-export function Modal({ open, onClose, title, children, wide }: { open: boolean; onClose(): void; title: string; children: ReactNode; wide?: boolean }) {
+/**
+ * Accessible modal built on the native <dialog> element (focus trapping and Esc for free).
+ *
+ * Forms are protected: once someone types in the dialog, clicking outside it,
+ * pressing Escape or the close button asks before throwing the changes away.
+ * Closing it from code (for example after saving) never asks. Dialogs whose
+ * controls save immediately pass `instant` to skip the check.
+ */
+export function Modal({ open, onClose, title, children, wide, instant }: { open: boolean; onClose(): void; title: string; children: ReactNode; wide?: boolean; instant?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const [dirty, setDirty] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const keepRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
-    if (open && !d.open) d.showModal();
+    if (open && !d.open) {
+      setDirty(false);
+      setConfirming(false);
+      d.showModal();
+    }
     if (!open && d.open) d.close();
   }, [open]);
+
+  // Warn before leaving the page with unsaved changes.
+  useEffect(() => {
+    if (!open || !dirty || instant) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [open, dirty, instant]);
+
+  useEffect(() => {
+    if (confirming) keepRef.current?.focus();
+  }, [confirming]);
+
+  const requestClose = () => {
+    if (dirty && !instant) setConfirming(true);
+    else onClose();
+  };
+
   return (
     <dialog
       ref={ref}
       className={`modal${wide ? ' modal-wide' : ''}`}
       aria-labelledby={titleId}
-      onClose={onClose}
+      onClose={() => {
+        // The dialog can still be closed by the browser (e.g. a second Escape); keep React in sync.
+        if (open) onClose();
+      }}
+      onCancel={(e) => {
+        e.preventDefault();
+        requestClose();
+      }}
+      onInput={() => setDirty(true)}
+      onChange={() => setDirty(true)}
       onClick={(e) => {
-        if (e.target === ref.current) onClose();
+        if (e.target === ref.current) requestClose();
       }}
     >
       {open && (
         <div className="modal-body">
           <div className="modal-head">
             <h2 id={titleId}>{title}</h2>
-            <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>
+            <button type="button" className="icon-btn" aria-label="Close" onClick={requestClose}>
               <Icon name="close" />
             </button>
           </div>
+          {confirming && (
+            <div className="discard-bar" role="alertdialog" aria-label="Unsaved changes">
+              <p>
+                <strong>You have unsaved changes.</strong> Close and lose them?
+              </p>
+              <div className="row">
+                <Button ref={keepRef} variant="primary" small onClick={() => setConfirming(false)}>
+                  Keep editing
+                </Button>
+                <Button
+                  variant="danger"
+                  small
+                  onClick={() => {
+                    setConfirming(false);
+                    setDirty(false);
+                    onClose();
+                  }}
+                >
+                  Discard changes
+                </Button>
+              </div>
+            </div>
+          )}
           {children}
         </div>
       )}
