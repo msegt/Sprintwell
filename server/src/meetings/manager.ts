@@ -29,15 +29,33 @@ export const ENGINES: Record<MeetingKind, AnyEngine> = {
   pairing: pairingEngine,
 };
 
-const EVICT_AFTER_MS = 5 * 60_000;
+type Handle = ReturnType<typeof setTimeout>;
+
+/**
+ * Schedules server-side timer callbacks (pairing rotation). Node uses
+ * setTimeout; Cloudflare Durable Objects use storage alarms so timers survive
+ * hibernation.
+ */
+export interface TimerHost {
+  set(meetingId: string, at: number): void;
+  clear(meetingId: string): void;
+}
+
+export interface ManagerOptions {
+  /** null disables server-side timers (e.g. in a stateless request handler). Default: setTimeout. */
+  timers?: TimerHost | null;
+  /** Drop idle meetings from memory after this many ms; null to never evict. Default 5 minutes. */
+  evictAfterMs?: number | null;
+  /** false: always read meetings from the database (for stateless request handlers). Default true. */
+  cache?: boolean;
+}
 
 const EMPTY_TIMER: TimerState = { endsAt: null, pausedRemainingMs: null, durationMs: 0 };
 
 interface Runtime {
   record: MeetingRecord;
   queue: Promise<unknown>;
-  timer?: NodeJS.Timeout;
-  evict?: NodeJS.Timeout;
+  evict?: Handle;
 }
 
 export interface Broadcaster {
@@ -48,11 +66,19 @@ export interface Broadcaster {
 
 export class MeetingManager {
   private cache = new Map<string, Runtime>();
+  private readonly timers: TimerHost | null;
+  private readonly evictAfterMs: number | null;
+  private readonly useCache: boolean;
 
   constructor(
     private readonly repo: Repo,
     private readonly out: Broadcaster,
-  ) {}
+    options: ManagerOptions = {},
+  ) {
+    this.timers = options.timers === undefined ? new TimeoutTimers((id) => void this.fireTimer(id)) : options.timers;
+    this.evictAfterMs = options.evictAfterMs === undefined ? 5 * 60_000 : options.evictAfterMs;
+    this.useCache = options.cache ?? true;
+  }
 
   async create(teamId: string, actorId: string, input: { kind: MeetingKind; title?: string; sprintId?: string | null; options: Record<string, unknown> }): Promise<string> {
     const engine = ENGINES[input.kind];
@@ -113,6 +139,7 @@ export class MeetingManager {
       },
       queue: Promise.resolve(),
     };
+    if (!this.useCache) return runtime;
     this.cache.set(id, runtime);
     this.scheduleTimer(runtime);
     this.scheduleEviction(runtime);
@@ -287,26 +314,36 @@ export class MeetingManager {
 
   /** Server-side timer only for engines that react to it (e.g. pairing rotation). */
   private scheduleTimer(runtime: Runtime): void {
-    clearTimeout(runtime.timer);
+    if (!this.timers) return;
     const engine = ENGINES[runtime.record.kind];
     const endsAt = runtime.record.timer.endsAt;
-    if (!engine.onTimerEnd || !endsAt || runtime.record.endedAt) return;
-    runtime.timer = setTimeout(() => {
-      void this.enqueue(runtime, async () => {
-        const r = runtime.record;
-        if (r.timer.endsAt !== endsAt) return;
-        const working: MeetingRecord = { ...r, timer: { ...r.timer }, state: structuredClone(r.state) };
-        const members = await this.repo.members(r.teamId);
-        const ctx = this.ctx(working, r.facilitatorId, 'member', members, () => undefined);
-        if (engine.onTimerEnd!(ctx)) {
-          runtime.record = { ...working, state: ctx.state, updatedAt: now() };
-          await this.persist(runtime);
-          this.scheduleTimer(runtime);
-          this.broadcast(runtime);
-        }
-      }).catch(() => undefined);
-    }, Math.max(0, endsAt - Date.now()));
-    runtime.timer.unref?.();
+    if (!engine.onTimerEnd || !endsAt || runtime.record.endedAt) this.timers.clear(runtime.record.id);
+    else this.timers.set(runtime.record.id, endsAt);
+  }
+
+  /** Runs a meeting's timer-end behaviour if its timer is due. Safe to call early or twice. */
+  async fireTimer(meetingId: string): Promise<void> {
+    const runtime = await this.load(meetingId).catch(() => null);
+    if (!runtime) return;
+    const engine = ENGINES[runtime.record.kind];
+    if (!engine.onTimerEnd) return;
+    await this.enqueue(runtime, async () => {
+      const r = runtime.record;
+      if (!r.timer.endsAt || r.endedAt) return;
+      if (r.timer.endsAt > Date.now() + 50) {
+        this.scheduleTimer(runtime);
+        return;
+      }
+      const working: MeetingRecord = { ...r, timer: { ...r.timer }, state: structuredClone(r.state) };
+      const members = await this.repo.members(r.teamId);
+      const ctx = this.ctx(working, r.facilitatorId, 'member', members, () => undefined);
+      if (engine.onTimerEnd!(ctx)) {
+        runtime.record = { ...working, state: ctx.state, updatedAt: now() };
+        await this.persist(runtime);
+        this.broadcast(runtime);
+      }
+      this.scheduleTimer(runtime);
+    }).catch(() => undefined);
   }
 
   /** Called by the hub when someone joins or leaves a meeting room. */
@@ -337,6 +374,7 @@ export class MeetingManager {
    */
   private scheduleEviction(runtime: Runtime): void {
     clearTimeout(runtime.evict);
+    if (this.evictAfterMs === null) return;
     const id = runtime.record.id;
     if (this.out.online(id).length > 0) return;
     runtime.evict = setTimeout(() => {
@@ -346,66 +384,105 @@ export class MeetingManager {
         this.scheduleEviction(runtime);
         return;
       }
-      clearTimeout(runtime.timer);
       if (this.cache.get(id) === runtime) this.cache.delete(id);
-    }, EVICT_AFTER_MS);
-    runtime.evict.unref?.();
+    }, this.evictAfterMs);
+    (runtime.evict as { unref?: () => void }).unref?.();
+  }
+
+  /** Forgets a cached meeting (after it was deleted elsewhere). */
+  forget(meetingId: string): void {
+    const runtime = this.cache.get(meetingId);
+    if (runtime) clearTimeout(runtime.evict);
+    this.timers?.clear(meetingId);
+    this.cache.delete(meetingId);
   }
 
   async remove(meetingId: string): Promise<void> {
-    const runtime = this.cache.get(meetingId);
-    if (runtime) {
-      clearTimeout(runtime.timer);
-      clearTimeout(runtime.evict);
-    }
-    this.cache.delete(meetingId);
+    this.forget(meetingId);
     await this.repo.db.deleteFrom('meetings').where('id', '=', meetingId).execute();
   }
 
   /** Forgets cached meetings of a deleted team. */
   forgetTeam(teamId: string): void {
     for (const [id, rt] of this.cache) {
-      if (rt.record.teamId === teamId) {
-        clearTimeout(rt.timer);
-        clearTimeout(rt.evict);
-        this.cache.delete(id);
-      }
+      if (rt.record.teamId === teamId) this.forget(id);
     }
   }
 
   async summaryMarkdown(meetingId: string): Promise<{ filename: string; markdown: string }> {
     const runtime = await this.load(meetingId);
-    const r = runtime.record;
-    const engine = ENGINES[r.kind];
-    const actions = await this.repo.db.selectFrom('actions').selectAll().where('team_id', '=', r.teamId).where('meeting_id', '=', r.id).execute();
-    const team = await this.repo.db.selectFrom('teams').select('name').where('id', '=', r.teamId).executeTakeFirst();
-    const sprint = r.sprintId ? await this.repo.db.selectFrom('sprints').selectAll().where('id', '=', r.sprintId).executeTakeFirst() : undefined;
-    const ids = new Set<string>([r.facilitatorId, ...actions.map((a) => a.owner_id ?? '')]);
-    collectIds(r.state, ids);
+    const [summary] = await this.summarise(runtime.record.teamId, [runtime.record]);
+    return summary!;
+  }
+
+  /** Summaries of every meeting of a team, with a fixed number of queries (D1 limits subrequests). */
+  async teamSummaries(teamId: string): Promise<Map<string, string>> {
+    const rows = await this.repo.db.selectFrom('meetings').selectAll().where('team_id', '=', teamId).orderBy('created_at', 'desc').limit(200).execute();
+    const records = rows.map((row) => {
+      const cached = this.cache.get(row.id);
+      if (cached) return cached.record;
+      const stored = parseJson<{ timer: TimerState; data: unknown }>(row.state, { timer: EMPTY_TIMER, data: {} });
+      return {
+        id: row.id,
+        teamId: row.team_id,
+        kind: row.kind as MeetingKind,
+        title: row.title,
+        sprintId: row.sprint_id,
+        facilitatorId: row.facilitator_id,
+        phase: row.phase,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        endedAt: row.ended_at,
+        timer: stored.timer ?? EMPTY_TIMER,
+        state: stored.data,
+      } satisfies MeetingRecord;
+    });
+    const out = new Map<string, string>();
+    const summaries = await this.summarise(teamId, records);
+    records.forEach((r, i) => out.set(r.id, summaries[i]!.markdown));
+    return out;
+  }
+
+  private async summarise(teamId: string, records: MeetingRecord[]): Promise<{ filename: string; markdown: string }[]> {
+    const [allActions, team, sprints] = await Promise.all([
+      this.repo.db.selectFrom('actions').selectAll().where('team_id', '=', teamId).where('meeting_id', 'is not', null).execute(),
+      this.repo.db.selectFrom('teams').select('name').where('id', '=', teamId).executeTakeFirst(),
+      this.repo.db.selectFrom('sprints').selectAll().where('team_id', '=', teamId).execute(),
+    ]);
+    const ids = new Set<string>(allActions.map((a) => a.owner_id ?? ''));
+    for (const r of records) {
+      ids.add(r.facilitatorId);
+      collectIds(r.state, ids);
+    }
     const nameMap = await this.repo.userNames([...ids].filter(Boolean));
     const names = (id: string | null | undefined) => (id ? (nameMap[id] ?? 'Someone') : 'Unassigned');
 
-    const lines = [
-      `# ${md(r.title)}`,
-      '',
-      `- Team: ${md(team?.name ?? '')}`,
-      `- Event: ${MEETING_INFO[r.kind].name}`,
-      `- Date: ${r.createdAt.slice(0, 10)}`,
-      `- Facilitator: ${md(names(r.facilitatorId))}`,
-      ...(sprint ? [`- Sprint: ${md(sprint.name)}${sprint.goal ? ` (Sprint Goal: ${md(sprint.goal)})` : ''}`] : []),
-      `- Status: ${r.endedAt ? `ended ${r.endedAt.slice(0, 16).replace('T', ' ')} UTC` : 'in progress'}`,
-      '',
-      '## Summary',
-      '',
-      engine.summary(r.state, r, names),
-    ];
-    if (actions.length) {
-      lines.push('', '## Actions', '');
-      for (const a of actions) lines.push(`- [${a.status === 'done' ? 'x' : ' '}] ${md(a.text)} (owner: ${md(names(a.owner_id))}${a.due_date ? `, due ${a.due_date}` : ''})`);
-    }
-    lines.push('', `_Exported from Sprintwell on ${new Date().toISOString().slice(0, 10)}._`, '');
-    const slug = r.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'meeting';
-    return { filename: `${r.createdAt.slice(0, 10)}-${slug}.md`, markdown: lines.join('\n') };
+    return records.map((r) => {
+      const engine = ENGINES[r.kind];
+      const actions = allActions.filter((a) => a.meeting_id === r.id);
+      const sprint = r.sprintId ? sprints.find((sp) => sp.id === r.sprintId) : undefined;
+      const lines = [
+        `# ${md(r.title)}`,
+        '',
+        `- Team: ${md(team?.name ?? '')}`,
+        `- Event: ${MEETING_INFO[r.kind].name}`,
+        `- Date: ${r.createdAt.slice(0, 10)}`,
+        `- Facilitator: ${md(names(r.facilitatorId))}`,
+        ...(sprint ? [`- Sprint: ${md(sprint.name)}${sprint.goal ? ` (Sprint Goal: ${md(sprint.goal)})` : ''}`] : []),
+        `- Status: ${r.endedAt ? `ended ${r.endedAt.slice(0, 16).replace('T', ' ')} UTC` : 'in progress'}`,
+        '',
+        '## Summary',
+        '',
+        engine.summary(r.state, r, names),
+      ];
+      if (actions.length) {
+        lines.push('', '## Actions', '');
+        for (const a of actions) lines.push(`- [${a.status === 'done' ? 'x' : ' '}] ${md(a.text)} (owner: ${md(names(a.owner_id))}${a.due_date ? `, due ${a.due_date}` : ''})`);
+      }
+      lines.push('', `_Exported from Sprintwell on ${new Date().toISOString().slice(0, 10)}._`, '');
+      const slug = r.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'meeting';
+      return { filename: `${r.createdAt.slice(0, 10)}-${slug}.md`, markdown: lines.join('\n') };
+    });
   }
 }
 
@@ -425,5 +502,25 @@ function collectIds(value: unknown, into: Set<string>, depth = 0): void {
       if (/^[0-9a-z]{16}$/.test(k)) into.add(k);
       collectIds(v, into, depth + 1);
     }
+  }
+}
+
+/** Default timer host for a long-running Node process. */
+class TimeoutTimers implements TimerHost {
+  private handles = new Map<string, Handle>();
+  constructor(private readonly fire: (meetingId: string) => void) {}
+  set(meetingId: string, at: number): void {
+    this.clear(meetingId);
+    const h = setTimeout(() => {
+      this.handles.delete(meetingId);
+      this.fire(meetingId);
+    }, Math.max(0, at - Date.now()));
+    (h as { unref?: () => void }).unref?.();
+    this.handles.set(meetingId, h);
+  }
+  clear(meetingId: string): void {
+    const h = this.handles.get(meetingId);
+    if (h) clearTimeout(h);
+    this.handles.delete(meetingId);
   }
 }

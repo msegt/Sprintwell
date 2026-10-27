@@ -1,0 +1,23 @@
+{
+  "name": "@sprintwell/worker",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "dependencies": {
+    "hono": "^4.13.14",
+    "kysely": "^0.29.7",
+    "kysely-d1": "^0.4.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261027.1",
+    "wrangler": "^4.154.0"
+  },
+  "scripts": {
+    "db:migrate:local": "wrangler d1 migrations apply sprintwell --local",
+    "dev": "npm run db:migrate:local && wrangler dev --port 8787",
+    "deploy": "wrangler d1 migrations apply sprintwell --remote && wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "migration:generate": "tsx scripts/generate-migration.ts"
+  }
+}

@@ -14,8 +14,8 @@ afterAll(async () => {
   await s?.stop();
 });
 
-async function connect(token: string) {
-  const c = await WsClient.connect(s, token);
+async function connect(token: string, teamId: string) {
+  const c = await WsClient.connect(s, token, teamId);
   clients.push(c);
   return c;
 }
@@ -45,7 +45,7 @@ describe('websocket basics', () => {
     const a = await team(s, 'Ada');
     const b = await team(s, 'Bob');
     const id = await meeting(a.teamId, a.admin.token, 'poker');
-    const bob = await connect(b.admin.token);
+    const bob = await connect(b.admin.token, a.teamId);
     const err = bob.wait((m) => m.t === 'error');
     bob.send({ t: 'join', meetingId: id });
     expect(await err).toMatchObject({ t: 'error' });
@@ -53,7 +53,7 @@ describe('websocket basics', () => {
   });
 
   it('closes unauthenticated sockets that send a bad token', async () => {
-    const ws = new (await import('ws')).default(s.base.replace('http', 'ws') + '/ws');
+    const ws = new (await import('ws')).default(s.base.replace('http', 'ws') + '/ws?team=nosuchteam');
     await new Promise((r) => ws.once('open', r));
     const closed = new Promise<number>((r) => ws.once('close', (code) => r(code)));
     ws.send(JSON.stringify({ t: 'auth', token: 'nope' }));
@@ -62,7 +62,7 @@ describe('websocket basics', () => {
 
   it('tells team subscribers when data changes', async () => {
     const { teamId, admin } = await team(s, 'Ada');
-    const c = await connect(admin.token);
+    const c = await connect(admin.token, teamId);
     c.send({ t: 'sub', teamId });
     await sleep(50);
     const note = c.wait((m) => m.t === 'team' && m.teamId === teamId);
@@ -76,9 +76,9 @@ describe('Planning Poker', () => {
     const { teamId, admin, members } = await team(s, 'Ada', 'Grace', 'Linus');
     const story = (await s.api('POST', `/api/teams/${teamId}/stories`, admin.token, { title: 'Search courses' })).body;
     const id = await meeting(teamId, admin.token, 'poker', { storyIds: [story.id], deckId: 'fibonacci' });
-    const ada = await connect(admin.token);
-    const grace = await connect(members[0]!.token);
-    const linus = await connect(members[1]!.token);
+    const ada = await connect(admin.token, teamId);
+    const grace = await connect(members[0]!.token, teamId);
+    const linus = await connect(members[1]!.token, teamId);
     for (const c of [ada, grace, linus]) await c.join(id);
 
     await ada.ok(id, { type: 'vote', value: '3' });
@@ -109,9 +109,9 @@ describe('Planning Poker', () => {
   it('auto-reveals when everyone present has voted, ignoring observers', async () => {
     const { teamId, admin, members } = await team(s, 'Ada', 'Grace', 'Olga');
     const id = await meeting(teamId, admin.token, 'poker', { autoReveal: true });
-    const ada = await connect(admin.token);
-    const grace = await connect(members[0]!.token);
-    const olga = await connect(members[1]!.token);
+    const ada = await connect(admin.token, teamId);
+    const grace = await connect(members[0]!.token, teamId);
+    const olga = await connect(members[1]!.token, teamId);
     for (const c of [ada, grace, olga]) await c.join(id);
     await ada.ok(id, { type: 'addItems', titles: ['Export to CSV'] });
     await olga.ok(id, { type: 'setObserver', observer: true });
@@ -126,8 +126,8 @@ describe('Planning Poker', () => {
   it('lets someone claim facilitation when the facilitator has gone', async () => {
     const { teamId, admin, members } = await team(s, 'Ada', 'Grace');
     const id = await meeting(teamId, admin.token, 'poker');
-    const ada = await connect(admin.token);
-    const grace = await connect(members[0]!.token);
+    const ada = await connect(admin.token, teamId);
+    const grace = await connect(members[0]!.token, teamId);
     await ada.join(id);
     await grace.join(id);
     expect((await grace.cmd(id, { type: 'claimFacilitator' })).ok).toBe(false);
@@ -142,8 +142,8 @@ describe('Retrospective', () => {
   it('runs the full flow with hidden writing, grouping, dot voting and anonymity', async () => {
     const { teamId, admin, members } = await team(s, 'Ada', 'Grace');
     const id = await meeting(teamId, admin.token, 'retro', { templateId: 'start-stop-continue' });
-    const ada = await connect(admin.token);
-    const grace = await connect(members[0]!.token);
+    const ada = await connect(admin.token, teamId);
+    const grace = await connect(members[0]!.token, teamId);
     await ada.join(id);
     await grace.join(id);
 
@@ -210,7 +210,7 @@ describe('Retrospective', () => {
   it('shows authors when the retrospective is not anonymous', async () => {
     const { teamId, admin } = await team(s, 'Ada');
     const id = await meeting(teamId, admin.token, 'retro', { templateId: 'mad-sad-glad', anonymous: false });
-    const ada = await connect(admin.token);
+    const ada = await connect(admin.token, teamId);
     await ada.join(id);
     await ada.ok(id, { type: 'setPhase', phase: 'reflect' });
     const v = retro(await ada.ok(id, { type: 'addCard', columnId: 'glad', text: 'Shipped!' }));
@@ -220,7 +220,7 @@ describe('Retrospective', () => {
   it('supports custom columns', async () => {
     const { teamId, admin } = await team(s, 'Ada');
     const id = await meeting(teamId, admin.token, 'retro', { templateId: 'custom', columns: [{ title: 'Kudos', prompt: 'Thank someone' }, { title: '' }] });
-    const ada = await connect(admin.token);
+    const ada = await connect(admin.token, teamId);
     const v = retro(await ada.join(id));
     expect(v.columns.map((c) => c.title)).toEqual(['Kudos']);
   });
@@ -230,8 +230,8 @@ describe('Other Scrum events', () => {
   it('Daily Scrum moves through speakers and restarts the timer', async () => {
     const { teamId, admin, members } = await team(s, 'Ada', 'Grace');
     const id = await meeting(teamId, admin.token, 'daily', { perPersonSeconds: 60 });
-    const ada = await connect(admin.token);
-    const grace = await connect(members[0]!.token);
+    const ada = await connect(admin.token, teamId);
+    const grace = await connect(members[0]!.token, teamId);
     const v0 = await ada.join(id);
     await grace.join(id);
     expect((v0.data as Data<'daily'>).order).toHaveLength(2);
@@ -249,7 +249,7 @@ describe('Other Scrum events', () => {
   it('Sprint Planning creates the next sprint and records capacity', async () => {
     const { teamId, admin, members } = await team(s, 'Ada', 'Grace');
     const id = await meeting(teamId, admin.token, 'planning');
-    const ada = await connect(admin.token);
+    const ada = await connect(admin.token, teamId);
     const v = await ada.join(id);
     expect(v.sprintId).toBeTruthy();
     expect(v.title).toBe('Sprint Planning: Sprint 1');
@@ -266,7 +266,7 @@ describe('Other Scrum events', () => {
     const { teamId, admin } = await team(s, 'Ada');
     const sprint = (await s.api('POST', `/api/teams/${teamId}/sprints`, admin.token, { name: 'Sprint 1' })).body;
     const id = await meeting(teamId, admin.token, 'review', {}, { sprintId: sprint.id });
-    const ada = await connect(admin.token);
+    const ada = await connect(admin.token, teamId);
     await ada.join(id);
     const v = await ada.ok(id, { type: 'addFeedback', text: 'Add dark mode', from: 'Client' });
     const fb = (v.data as Data<'review'>).feedback[0]!;
@@ -278,7 +278,7 @@ describe('Other Scrum events', () => {
   it('Pairing timer rotates the driver automatically', async () => {
     const { teamId, admin, members } = await team(s, 'Ada', 'Grace');
     const id = await meeting(teamId, admin.token, 'pairing', { participants: [admin.id, members[0]!.id] });
-    const ada = await connect(admin.token);
+    const ada = await connect(admin.token, teamId);
     await ada.join(id);
     await ada.ok(id, { type: 'setInterval', seconds: 30 });
     // Use a 1-second timer to trigger the server-side rotation quickly.
@@ -300,7 +300,7 @@ describe('hardening', () => {
   it('refuses to switch identity on an authenticated socket', async () => {
     const { teamId, admin, members } = await team(s, 'Ada', 'Mallory');
     const id = await meeting(teamId, admin.token, 'retro');
-    const mallory = await connect(members[0]!.token);
+    const mallory = await connect(members[0]!.token, teamId);
     await mallory.join(id);
     const other = await s.api('POST', '/api/session', null, { displayName: 'Sock puppet' });
     const err = mallory.wait((m) => m.t === 'error');
@@ -310,7 +310,7 @@ describe('hardening', () => {
     await s.api('DELETE', `/api/teams/${teamId}/members/${members[0]!.id}`, admin.token);
     await sleep(50);
     const before = mallory.messages.filter((m) => m.t === 'meeting').length;
-    const ada = await connect(admin.token);
+    const ada = await connect(admin.token, teamId);
     await ada.join(id);
     await ada.ok(id, { type: 'setPhase', phase: 'reflect' });
     await ada.ok(id, { type: 'addCard', columnId: 'start', text: 'Secret' });
@@ -321,7 +321,7 @@ describe('hardening', () => {
   it('escapes Markdown in summaries', async () => {
     const { teamId, admin } = await team(s, 'Ada');
     const id = await meeting(teamId, admin.token, 'poker');
-    const ada = await connect(admin.token);
+    const ada = await connect(admin.token, teamId);
     await ada.join(id);
     await ada.ok(id, { type: 'rename', title: 'x\n\n## Grades [link](https://evil)' });
     const md = await s.api('GET', `/api/teams/${teamId}/meetings/${id}/summary.md`, admin.token);
@@ -335,7 +335,7 @@ describe('hardening', () => {
     const foreign = (await s.api('POST', `/api/teams/${b.teamId}/stories`, b.admin.token, { title: 'Not yours' })).body;
     const sprint = (await s.api('POST', `/api/teams/${a.teamId}/sprints`, a.admin.token, { name: 'S1' })).body;
     const id = await meeting(a.teamId, a.admin.token, 'review', {}, { sprintId: sprint.id });
-    const ada = await connect(a.admin.token);
+    const ada = await connect(a.admin.token, a.teamId);
     await ada.join(id);
     expect((await ada.cmd(id, { type: 'setDemoed', storyId: foreign.id, demoed: true })).ok).toBe(false);
   });

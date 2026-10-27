@@ -26,17 +26,16 @@ import {
   updateMeBody,
   updateTeamBody,
 } from '@sprintwell/shared/schemas';
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ZodType } from 'zod';
 import type { Config } from '../config';
 import type { MeetingManager } from '../meetings/manager';
-import type { Hub } from '../realtime/hub';
 import type { Repo } from '../repo';
+import { FileResponse, type ApiRequest, type ApiRouter, type RealtimeControl } from './router';
 import { HttpError, badRequest, forbidden, notFound } from '../util';
 
 export interface Deps {
   repo: Repo;
-  hub: Hub;
+  realtime: RealtimeControl;
   meetings: MeetingManager;
   config: Config;
 }
@@ -51,7 +50,7 @@ function parse<T>(schema: ZodType<T>, value: unknown): T {
   return r.data;
 }
 
-function bearer(req: FastifyRequest): string | null {
+function bearer(req: ApiRequest): string | null {
   const h = req.headers.authorization;
   if (!h || !h.startsWith('Bearer ')) return null;
   return h.slice(7).trim() || null;
@@ -59,31 +58,31 @@ function bearer(req: FastifyRequest): string | null {
 
 type Params = Record<string, string>;
 
-export function registerApi(app: FastifyInstance, deps: Deps): void {
-  const { repo, hub, meetings, config } = deps;
+export function registerApi(app: ApiRouter, deps: Deps): void {
+  const { repo, realtime, meetings, config } = deps;
 
-  async function user(req: FastifyRequest): Promise<UserDTO> {
+  async function user(req: ApiRequest): Promise<UserDTO> {
     const token = bearer(req);
     const u = token ? await repo.userForToken(token) : null;
     if (!u) throw new HttpError(401, 'Please join or create a team first.');
     return u;
   }
 
-  async function member(req: FastifyRequest, teamId: string): Promise<{ user: UserDTO; role: TeamRole }> {
+  async function member(req: ApiRequest, teamId: string): Promise<{ user: UserDTO; role: TeamRole }> {
     const u = await user(req);
     const role = await repo.membership(teamId, u.id);
     if (!role) throw notFound('Team not found');
     return { user: u, role };
   }
 
-  async function admin(req: FastifyRequest, teamId: string) {
+  async function admin(req: ApiRequest, teamId: string) {
     const m = await member(req, teamId);
     if (m.role !== 'admin') throw forbidden('Only team admins can do that.');
     return m;
   }
 
-  const changed = (teamId: string) => hub.notifyTeam(teamId);
-  const strictLimit = { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } };
+  const changed = (teamId: string) => realtime.notifyTeam(teamId);
+  const strictLimit = { strict: true };
 
   // ------------------------------------------------------------ public
 
@@ -121,19 +120,19 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
     return { ok: true };
   });
 
-  app.get('/api/me/export', async (req, reply) => {
+  app.get('/api/me/export', async (req) => {
     const u = await user(req);
     const teams = await repo.teamsForUser(u.id);
-    reply.header('content-disposition', 'attachment; filename="sprintwell-my-data.json"');
-    return { exportedAt: new Date().toISOString(), user: u, teams };
+    const body = JSON.stringify({ exportedAt: new Date().toISOString(), user: u, teams }, null, 2);
+    return new FileResponse(body, 'application/json; charset=utf-8', 'sprintwell-my-data.json');
   });
 
   app.delete('/api/me', async (req) => {
     const u = await user(req);
     const teams = await repo.deleteUser(u.id);
     for (const t of teams) {
-      hub.revoke(t, u.id);
-      if (!(await repo.teamExists(t))) meetings.forgetTeam(t);
+      realtime.revoke(t, u.id);
+      if (!(await repo.teamExists(t))) realtime.forgetTeam(t);
       changed(t);
     }
     return { ok: true };
@@ -199,9 +198,9 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
     await admin(req, teamId!);
     const members = await repo.members(teamId!);
     await repo.deleteTeam(teamId!);
-    meetings.forgetTeam(teamId!);
+    realtime.forgetTeam(teamId!);
     changed(teamId!);
-    for (const m of members) hub.revoke(teamId!, m.userId);
+    for (const m of members) realtime.revoke(teamId!, m.userId);
     return { ok: true };
   });
 
@@ -227,10 +226,10 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
     const m = await member(req, teamId!);
     if (m.user.id !== userId && m.role !== 'admin') throw forbidden('Only team admins can remove other people.');
     await repo.removeMember(teamId!, userId!);
-    hub.revoke(teamId!, userId!);
+    realtime.revoke(teamId!, userId!);
     let inviteRotated = false;
     if (!(await repo.teamExists(teamId!))) {
-      meetings.forgetTeam(teamId!);
+      realtime.forgetTeam(teamId!);
     } else if (m.user.id !== userId) {
       // Stop the removed person rejoining with the link they already have.
       await repo.regenerateInvite(teamId!);
@@ -240,18 +239,19 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
     return { ok: true, inviteRotated };
   });
 
-  app.get('/api/teams/:teamId/export.json', async (req, reply) => {
+  app.get('/api/teams/:teamId/export.json', async (req) => {
     const { teamId } = req.params as Params;
     const { role } = await member(req, teamId!);
     const snap = await repo.snapshot(teamId!, role);
     const summaries = [];
-    for (const m of snap.meetings) summaries.push({ ...m, summaryMarkdown: (await meetings.summaryMarkdown(m.id)).markdown });
+    const markdown = await meetings.teamSummaries(teamId!);
+    for (const m of snap.meetings) summaries.push({ ...m, summaryMarkdown: markdown.get(m.id) ?? '' });
     const { inviteCode: _omit, ...team } = snap.team;
-    reply.header('content-disposition', `attachment; filename="sprintwell-${slug(snap.team.name)}.json"`);
-    return { format: 'sprintwell-export', version: 1, exportedAt: new Date().toISOString(), ...snap, team, meetings: summaries };
+    const body = JSON.stringify({ format: 'sprintwell-export', version: 1, exportedAt: new Date().toISOString(), ...snap, team, meetings: summaries }, null, 2);
+    return new FileResponse(body, 'application/json; charset=utf-8', `sprintwell-${slug(snap.team.name)}.json`);
   });
 
-  app.get('/api/teams/:teamId/stories.csv', async (req, reply) => {
+  app.get('/api/teams/:teamId/stories.csv', async (req) => {
     const { teamId } = req.params as Params;
     const { role } = await member(req, teamId!);
     const snap = await repo.snapshot(teamId!, role);
@@ -267,9 +267,8 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
         .join('\n');
       rows.push([s.title, description, s.estimate ?? '', s.status, s.sprintId ? (sprintName.get(s.sprintId) ?? '') : '']);
     }
-    reply.header('content-type', 'text/csv; charset=utf-8');
-    reply.header('content-disposition', `attachment; filename="${slug(snap.team.name)}-stories.csv"`);
-    return rows.map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n';
+    const csv = rows.map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n';
+    return new FileResponse(csv, 'text/csv; charset=utf-8', `${slug(snap.team.name)}-stories.csv`);
   });
 
   // ------------------------------------------------------------ charter
@@ -452,14 +451,12 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
     return { meetingId };
   });
 
-  app.get('/api/teams/:teamId/meetings/:id/summary.md', async (req, reply: FastifyReply) => {
+  app.get('/api/teams/:teamId/meetings/:id/summary.md', async (req) => {
     const { teamId, id } = req.params as Params;
     await member(req, teamId!);
     if ((await meetings.teamOf(id!)) !== teamId) throw notFound('Meeting not found');
     const { filename, markdown } = await meetings.summaryMarkdown(id!);
-    reply.header('content-type', 'text/markdown; charset=utf-8');
-    reply.header('content-disposition', `attachment; filename="${filename}"`);
-    return markdown;
+    return new FileResponse(markdown, 'text/markdown; charset=utf-8', filename);
   });
 
   app.delete('/api/teams/:teamId/meetings/:id', async (req) => {
@@ -469,6 +466,7 @@ export function registerApi(app: FastifyInstance, deps: Deps): void {
     if (runtime.record.teamId !== teamId) throw notFound('Meeting not found');
     if (runtime.record.facilitatorId !== u.id && role !== 'admin') throw forbidden('Only the facilitator or a team admin can delete a meeting.');
     await meetings.remove(id!);
+    realtime.forgetMeeting(teamId!, id!);
     changed(teamId!);
     return { ok: true };
   });

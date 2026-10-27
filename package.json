@@ -1,6 +1,6 @@
 {
   "name": "sprintwell",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Sprintwell: real-time tools for Agile teams to run their own Scrum events, planning poker and retrospectives.",
   "license": "AGPL-3.0-only",
@@ -8,7 +8,8 @@
   "workspaces": [
     "shared",
     "server",
-    "web"
+    "web",
+    "worker"
   ],
   "engines": {
     "node": ">=22"
@@ -20,8 +21,11 @@
     "test": "npm test -w shared && npm test -w server",
     "test:pg": "npm run test:pg -w server",
     "test:e2e": "playwright test",
-    "typecheck": "npm run typecheck -w shared && npm run typecheck -w server && npm run typecheck -w web",
-    "check": "npm run typecheck && npm test && npm run build"
+    "typecheck": "npm run typecheck -w shared && npm run typecheck -w server && npm run typecheck -w web && npm run typecheck -w worker",
+    "check": "npm run typecheck && npm test && npm run build",
+    "dev:cf": "npm run build -w web && npm run dev -w worker",
+    "deploy:cf": "npm run build -w web && npm run deploy -w worker",
+    "test:cf": "SPRINTWELL_TEST_URL=http://127.0.0.1:8787 npm test -w server -- test/api.test.ts test/meetings.test.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",

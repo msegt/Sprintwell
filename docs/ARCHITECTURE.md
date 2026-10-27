@@ -15,13 +15,35 @@ Browser (React)  ──REST──▶  Fastify API  ──Kysely──▶  SQLite
   - retrospective templates and Planning Poker decks
   - poker statistics, and capacity and burndown maths
   - zod validation schemas, under the separate entry point `@sprintwell/shared/schemas` so the web bundle stays small.
-- **`server/`** is a Fastify app (`app.ts`):
+- **`server/`** holds the shared server core and the Node adapter (Fastify, `app.ts`):
   - `repo.ts`: all database access. Every team-scoped query filters by team id.
   - `routes/api.ts`: REST endpoints for team data (stories, sprints, charter, actions, risks, members, exports).
-  - `realtime/hub.ts`: WebSocket connections, team subscriptions, meeting rooms, flood protection.
+  - `realtime/core.ts`: the WebSocket protocol (sign-in, team subscriptions, meeting rooms, flood protection); `realtime/hub.ts` keeps the Node server's connections.
   - `meetings/manager.ts`: loads meetings, runs commands one at a time per meeting, persists state, broadcasts views, runs server-side timers.
   - `meetings/*.ts`: one engine per event type (poker, retro, daily, planning, review, pairing).
 - **`web/`** is a React app built with Vite. There are no UI libraries; styles are in `styles.css` with design tokens for light and dark themes.
+
+## Two deployment targets, one core
+
+Most server code is platform-neutral and is shared by both targets:
+
+- **API handlers:** `server/src/routes/api.ts`, written against a small router interface (`router.ts`).
+- **Real-time protocol:** `server/src/realtime/core.ts`.
+- **Meeting engines and manager:** `server/src/meetings/`.
+- **Data layer:** `server/src/repo.ts`.
+
+| | Node (`server/`) | Cloudflare (`worker/`) |
+|---|---|---|
+| HTTP | Fastify | Hono in a Worker |
+| WebSockets | `ws`, one hub for all teams | One `TeamRoom` Durable Object per team, using the Hibernation API |
+| Connection state | In memory | WebSocket attachments, so it survives hibernation |
+| Server-side timers | `setTimeout` | Durable Object alarms |
+| Database | SQLite (better-sqlite3) or PostgreSQL | D1, through `kysely-d1`. D1 has no interactive transactions, so grouped writes run in sequence |
+| Static files | `@fastify/static` | Workers static assets (single-page-app fallback, `_headers` for security headers) |
+
+On Cloudflare, the Worker is stateless. It handles REST calls and forwards `/ws?team=…` to that team's Durable Object. After changing data, it tells the Durable Object (`/notify`, `/revoke`, `/forget-meeting`, `/forget-team`), which pushes the update to the team's connections. Only the Durable Object writes meeting state, so commands for a meeting are always handled in one place.
+
+The same API and WebSocket test suite runs against both targets, plus PostgreSQL.
 
 ## Real-time model
 

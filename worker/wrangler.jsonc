@@ -1,0 +1,35 @@
+{
+  // Sprintwell on Cloudflare: Worker (API + static web app), one Durable Object
+  // per team for real-time events, and D1 (SQLite) for data.
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "sprintwell",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "minify": true,
+  "assets": {
+    "directory": "../web/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/ws", "/healthz"]
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "TEAM_ROOM", "class_name": "TeamRoom" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TeamRoom"] }],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sprintwell",
+      // Replace with the id printed by `npx wrangler d1 create sprintwell`.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "DONATION_URL": "",
+    "SOURCE_URL": "",
+    "DISABLE_RATE_LIMIT": ""
+  },
+  "observability": { "enabled": true }
+}

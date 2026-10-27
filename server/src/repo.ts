@@ -21,9 +21,10 @@ import {
   type TeamSummaryDTO,
   type UserDTO,
 } from '@sprintwell/shared';
-import type { Selectable } from 'kysely';
+import { sql, type Insertable, type Selectable } from 'kysely';
 import type { Db } from './db';
 import type {
+  Database,
   ActionsTable,
   CharterItemsTable,
   MeetingsTable,
@@ -130,7 +131,24 @@ type TeamTable = 'charter_items' | 'sprints' | 'stories' | 'actions' | 'risks' |
 
 /** Data access. Every team-scoped method filters by team id to prevent cross-team access. */
 export class Repo {
-  constructor(readonly db: Db) {}
+  constructor(
+    readonly db: Db,
+    /** Cloudflare D1 has no interactive transactions; there, grouped writes run in sequence. */
+    private readonly options: { transactions: boolean } = { transactions: true },
+  ) {}
+
+  private tx<T>(fn: (db: Db) => Promise<T>): Promise<T> {
+    return this.options.transactions ? this.db.transaction().execute(fn) : fn(this.db);
+  }
+
+  /** Inserts rows in chunks that stay under D1's limit of 100 bound parameters per query. */
+  private async insertMany<T extends 'charter_items' | 'stories'>(db: Db, table: T, rows: Insertable<Database[T]>[]): Promise<void> {
+    if (rows.length === 0) return;
+    const per = Math.max(1, Math.floor(90 / Object.keys(rows[0]!).length));
+    for (let i = 0; i < rows.length; i += per) {
+      await db.insertInto(table).values(rows.slice(i, i + per) as never).execute();
+    }
+  }
 
   /** Rejects writes that would take a team past a size limit. */
   async assertRoom(table: TeamTable, teamId: string, adding: number, max: number, what: string): Promise<void> {
@@ -141,9 +159,12 @@ export class Repo {
   /** Rejects user ids that are not current members of the team (owners, assignees). */
   async assertMembers(teamId: string, ids: (string | null | undefined)[]): Promise<void> {
     const wanted = [...new Set(ids.filter((x): x is string => !!x))];
-    if (wanted.length === 0) return;
-    const rows = await this.db.selectFrom('memberships').select('user_id').where('team_id', '=', teamId).where('user_id', 'in', wanted).execute();
-    if (rows.length !== wanted.length) throw badRequest('Owners must be members of the team.');
+    let found = 0;
+    for (const part of chunks(wanted, 90)) {
+      const rows = await this.db.selectFrom('memberships').select('user_id').where('team_id', '=', teamId).where('user_id', 'in', part).execute();
+      found += rows.length;
+    }
+    if (found !== wanted.length) throw badRequest('Owners must be members of the team.');
   }
 
   // ---------------------------------------------------------------- users
@@ -228,7 +249,7 @@ export class Repo {
   async createTeam(userId: string, name: string, starterCharter: boolean): Promise<string> {
     const id = newId();
     const ts = now();
-    await this.db.transaction().execute(async (trx) => {
+    await this.tx(async (trx) => {
       await trx
         .insertInto('teams')
         .values({ id, name, invite_code: newInviteCode(), settings: JSON.stringify(DEFAULT_TEAM_SETTINGS), created_at: ts, created_by: userId })
@@ -240,7 +261,7 @@ export class Repo {
           ...STARTER_DOR.map((text, i) => ({ kind: 'dor', text, position: i })),
           ...STARTER_DOD.map((text, i) => ({ kind: 'dod', text, position: i })),
         ].map((r) => ({ ...r, id: newId(), team_id: id, updated_at: ts, updated_by: null }));
-        await trx.insertInto('charter_items').values(rows).execute();
+        await this.insertMany(trx, 'charter_items', rows);
       }
     });
     return id;
@@ -319,7 +340,7 @@ export class Repo {
 
   /** Removes a member. If they were the last admin, the longest-standing member becomes admin; an empty team is deleted. */
   async removeMember(teamId: string, userId: string): Promise<void> {
-    await this.db.transaction().execute(async (trx) => {
+    await this.tx(async (trx) => {
       const role = await trx.selectFrom('memberships').select('role').where('team_id', '=', teamId).where('user_id', '=', userId).executeTakeFirst();
       if (!role) throw notFound('Member not found');
       await trx.deleteFrom('memberships').where('team_id', '=', teamId).where('user_id', '=', userId).execute();
@@ -364,9 +385,12 @@ export class Repo {
 
   /** Names for everyone who ever appeared in the team's data, including people who left. */
   async userNames(ids: string[]): Promise<Record<string, string>> {
-    if (ids.length === 0) return {};
-    const rows = await this.db.selectFrom('users').select(['id', 'display_name']).where('id', 'in', [...new Set(ids)]).execute();
-    return Object.fromEntries(rows.map((r) => [r.id, r.display_name]));
+    const out: Record<string, string> = {};
+    for (const part of chunks([...new Set(ids)], 90)) {
+      const rows = await this.db.selectFrom('users').select(['id', 'display_name']).where('id', 'in', part).execute();
+      for (const r of rows) out[r.id] = r.display_name;
+    }
+    return out;
   }
 
   async snapshot(teamId: string, viewerRole: TeamRole): Promise<TeamSnapshot> {
@@ -426,9 +450,20 @@ export class Repo {
   }
 
   async reorder(table: 'charter_items' | 'stories', teamId: string, ids: string[]): Promise<void> {
-    await this.db.transaction().execute(async (trx) => {
-      for (const [i, id] of ids.entries()) {
-        await trx.updateTable(table).set({ position: i }).where('team_id', '=', teamId).where('id', '=', id).execute();
+    // One UPDATE … CASE per chunk keeps the number of queries (and D1 subrequests) low.
+    await this.tx(async (trx) => {
+      for (let start = 0; start < ids.length; start += 30) {
+        const part = ids.slice(start, start + 30);
+        const cases = sql.join(
+          part.map((id, i) => sql`when ${id} then ${start + i}`),
+          sql` `,
+        );
+        await trx
+          .updateTable(table)
+          .set({ position: sql<number>`case id ${cases} else position end` })
+          .where('team_id', '=', teamId)
+          .where('id', 'in', part)
+          .execute();
       }
     });
   }
@@ -501,7 +536,7 @@ export class Repo {
   async closeSprint(teamId: string, id: string): Promise<{ returned: number }> {
     await this.sprint(teamId, id);
     let returned = 0;
-    await this.db.transaction().execute(async (trx) => {
+    await this.tx(async (trx) => {
       const r = await trx
         .updateTable('stories')
         .set({ sprint_id: null, status: 'backlog', updated_at: now() })
@@ -516,7 +551,7 @@ export class Repo {
   }
 
   async deleteSprint(teamId: string, id: string): Promise<void> {
-    await this.db.transaction().execute(async (trx) => {
+    await this.tx(async (trx) => {
       await trx.updateTable('stories').set({ sprint_id: null, status: 'backlog' }).where('team_id', '=', teamId).where('sprint_id', '=', id).where('status', '!=', 'done').execute();
       await trx.updateTable('stories').set({ sprint_id: null }).where('team_id', '=', teamId).where('sprint_id', '=', id).execute();
       await trx.deleteFrom('sprints').where('team_id', '=', teamId).where('id', '=', id).execute();
@@ -532,9 +567,11 @@ export class Repo {
   }
 
   async storiesByIds(teamId: string, ids: string[]): Promise<StoryDTO[]> {
-    if (ids.length === 0) return [];
-    const rows = await this.db.selectFrom('stories').selectAll().where('team_id', '=', teamId).where('id', 'in', ids).execute();
-    const byId = new Map(rows.map((r) => [r.id, toStory(r)]));
+    const byId = new Map<string, StoryDTO>();
+    for (const part of chunks(ids, 90)) {
+      const rows = await this.db.selectFrom('stories').selectAll().where('team_id', '=', teamId).where('id', 'in', part).execute();
+      for (const r of rows) byId.set(r.id, toStory(r));
+    }
     return ids.map((id) => byId.get(id)).filter((s): s is StoryDTO => !!s);
   }
 
@@ -570,7 +607,7 @@ export class Repo {
         done_at: s.status === 'done' ? ts : null,
       });
     }
-    if (rows.length > 0) await this.db.insertInto('stories').values(rows).execute();
+    await this.insertMany(this.db, 'stories', rows);
     return rows.map(toStory);
   }
 
@@ -701,4 +738,10 @@ export class Repo {
   async deleteRisk(teamId: string, id: string): Promise<void> {
     await this.db.deleteFrom('risks').where('team_id', '=', teamId).where('id', '=', id).execute();
   }
+}
+
+function chunks<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
 }

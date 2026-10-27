@@ -9,14 +9,38 @@ process.env.SPRINTWELL_DISABLE_RATE_LIMIT = '1';
 
 const PG_ADMIN = process.env.SPRINTWELL_TEST_PG ?? 'postgres://sprintwell:sprintwell@localhost:5432/sprintwell_test';
 
-export interface TestServer extends App {
+export interface TestServer extends Partial<App> {
   base: string;
   dialect: string;
   api<T = any>(method: string, path: string, token?: string | null, body?: unknown): Promise<{ status: number; body: T; text: string }>;
   stop(): Promise<void>;
 }
 
+async function apiCall(base: string, method: string, path: string, token?: string | null, body?: unknown) {
+  const res = await fetch(base + path, {
+    method,
+    headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  const text = await res.text();
+  let parsed: any = text;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    /* not JSON */
+  }
+  return { status: res.status, body: parsed, text };
+}
+
+/**
+ * Starts an in-process Node server, or, when SPRINTWELL_TEST_URL is set, points
+ * the same tests at an already running server (e.g. `wrangler dev` for Cloudflare).
+ */
 export async function startServer(): Promise<TestServer> {
+  const remote = process.env.SPRINTWELL_TEST_URL;
+  if (remote) {
+    return { base: remote.replace(/\/$/, ''), dialect: 'remote', api: (m, p, t, b) => apiCall(remote.replace(/\/$/, ''), m, p, t, b), stop: async () => undefined };
+  }
   let databaseUrl = ':memory:';
   let dropDb: (() => Promise<void>) | null = null;
   if (process.env.SPRINTWELL_TEST_DB === 'postgres') {
@@ -42,21 +66,7 @@ export async function startServer(): Promise<TestServer> {
     ...app,
     base,
     dialect: app.db.dialect,
-    async api(method, path, token, body) {
-      const res = await fetch(base + path, {
-        method,
-        headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-      });
-      const text = await res.text();
-      let parsed: any = text;
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        /* not JSON */
-      }
-      return { status: res.status, body: parsed, text };
-    },
+    api: (method, path, token, body) => apiCall(base, method, path, token, body),
     async stop() {
       await app.app.close();
       if (dropDb) await dropDb();
@@ -109,8 +119,8 @@ export class WsClient {
     });
   }
 
-  static async connect(s: TestServer, token: string): Promise<WsClient> {
-    const ws = new WebSocket(s.base.replace('http', 'ws') + '/ws');
+  static async connect(s: TestServer, token: string, teamId: string): Promise<WsClient> {
+    const ws = new WebSocket(s.base.replace('http', 'ws') + `/ws?team=${teamId}`);
     await new Promise((res, rej) => {
       ws.once('open', res);
       ws.once('error', rej);

@@ -29,7 +29,7 @@ export function useRoom(): RoomCtx {
 export function MeetingPage() {
   const { meetingId = '' } = useParams();
   const { teamId, me } = useTeam();
-  const { view, missing, send, serverOffset } = useMeeting(meetingId);
+  const { view, missing, send, serverOffset } = useMeeting(teamId, meetingId);
   const { announce } = useNotice();
   usePageTitle(view?.title ?? 'Event');
 

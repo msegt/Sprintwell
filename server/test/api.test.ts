@@ -80,8 +80,10 @@ describe('identity and teams', () => {
     expect((await s.api('GET', '/api/me', members[0]!.token)).status).toBe(401);
     const snap = await s.api('GET', `/api/teams/${teamId}`, admin.token);
     expect(snap.body.team.members).toHaveLength(1);
-    const names = await s.repo.userNames([members[0]!.id]);
-    expect(names[members[0]!.id]).toBe('Former member');
+    if (s.repo) {
+      const names = await s.repo.userNames([members[0]!.id]);
+      expect(names[members[0]!.id]).toBe('Former member');
+    }
   });
 });
 
@@ -166,8 +168,10 @@ describe('backlog, sprints and the rest of the team data', () => {
 
   it('exports team data without the invite code', async () => {
     const { teamId, admin } = await team(s, 'Ada');
+    await s.api('POST', `/api/teams/${teamId}/meetings`, admin.token, { kind: 'retro', title: 'Retro one', options: {} });
     const r = await s.api('GET', `/api/teams/${teamId}/export.json`, admin.token);
     expect(r.body.format).toBe('sprintwell-export');
+    expect(r.body.meetings[0].summaryMarkdown).toContain('# Retro one');
     expect(r.body.team.inviteCode).toBeUndefined();
   });
 
@@ -197,6 +201,20 @@ describe('hardening', () => {
     const r = await s.api('DELETE', `/api/teams/${teamId}/members/${members[0]!.id}`, admin.token);
     expect(r.body.inviteRotated).toBe(true);
     expect((await s.api('POST', '/api/teams/join', members[0]!.token, { code })).status).toBe(404);
+  });
+});
+
+describe('ordering', () => {
+  it('reorders the backlog in one go', async () => {
+    const { teamId, admin } = await team(s, 'Ada');
+    const titles = Array.from({ length: 35 }, (_, i) => `Story ${i + 1}`);
+    await s.api('POST', `/api/teams/${teamId}/stories/bulk`, admin.token, { stories: titles.map((title) => ({ title })) });
+    const before = (await s.api('GET', `/api/teams/${teamId}`, admin.token)).body.stories as { id: string; title: string }[];
+    expect(before).toHaveLength(35);
+    const reversed = [...before].reverse().map((x) => x.id);
+    expect((await s.api('POST', `/api/teams/${teamId}/stories/reorder`, admin.token, { ids: reversed })).status).toBe(200);
+    const after = (await s.api('GET', `/api/teams/${teamId}`, admin.token)).body.stories as { id: string }[];
+    expect(after.map((x) => x.id)).toEqual(reversed);
   });
 });
 

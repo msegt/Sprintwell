@@ -10,3 +10,6 @@ test-results/
 playwright-report/
 .DS_Store
 .idea/
+.wrangler/
+.dev.vars
+.claude/

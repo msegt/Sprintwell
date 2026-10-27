@@ -11,6 +11,7 @@ import { MeetingManager } from './meetings/manager';
 import { Hub } from './realtime/hub';
 import { Repo } from './repo';
 import { registerApi } from './routes/api';
+import { FileResponse, makeRouter } from './routes/router';
 import { HttpError } from './util';
 
 export interface App {
@@ -67,7 +68,34 @@ export async function buildApp(config: Config, opts: { logger?: boolean } = {}):
 
   app.get('/ws', { websocket: true }, (socket) => hub.accept(socket));
 
-  registerApi(app, { repo, hub, meetings, config });
+  const router = makeRouter((method, url, handler, options) => {
+    app.route({
+      method,
+      url,
+      config: options.strict ? { rateLimit: { max: 20, timeWindow: '1 minute' } } : {},
+      handler: async (req, reply) => {
+        const result = await handler({
+          params: req.params as Record<string, string>,
+          body: req.body,
+          headers: req.headers as Record<string, string | undefined>,
+          ip: req.ip,
+        });
+        if (result instanceof FileResponse) return reply.headers(result.headers).send(result.body);
+        return result;
+      },
+    });
+  });
+  registerApi(router, {
+    repo,
+    meetings,
+    config,
+    realtime: {
+      notifyTeam: (teamId) => hub.notifyTeam(teamId),
+      revoke: (teamId, userId) => void hub.revoke(teamId, userId),
+      forgetTeam: (teamId) => meetings.forgetTeam(teamId),
+      forgetMeeting: (_teamId, meetingId) => meetings.forget(meetingId),
+    },
+  });
 
   const webDir = config.webDir ? resolve(config.webDir) : '';
   if (webDir && existsSync(webDir)) {

@@ -4,7 +4,9 @@ Sprintwell is a free, open-source web app that Agile teams use to run their own 
 
 It was designed around how Scrum (2020 Scrum Guide) and Extreme Programming practices are taught on the MSc module CMT651 Agile Software Development at Cardiff University. It is meant to be just as useful to any other team.
 
-> **Status: early version (0.1).** All the core features work and have automated tests, but it has not yet been used by real teams. Expect rough edges.
+> **Status: early version (0.2).** All the core features work and have automated tests, but it has not yet been used by real teams. Expect rough edges.
+
+**Hosting:** Sprintwell runs on Cloudflare's free plan with no server to look after (Workers, Durable Objects and D1), or as a normal Node.js server. See **[docs/DEPLOY.md](docs/DEPLOY.md)**.
 
 ## What teams get
 
@@ -44,42 +46,35 @@ You need Node.js 22 or newer.
 
 ```bash
 npm install
-npm run dev          # API on :3000, web app on http://localhost:5173
+npm run dev          # Node version: API on :3000, web app on http://localhost:5173
+npm run dev:cf       # Cloudflare version in the local Workers runtime: http://localhost:8787
 ```
 
-By default the data goes into a SQLite file at `server/data/sprintwell.db`. To use PostgreSQL instead:
+By default, the Node version stores data in a SQLite file at `server/data/sprintwell.db`. To use PostgreSQL, set `DATABASE_URL=postgres://…`.
 
-```bash
-DATABASE_URL=postgres://user:password@localhost:5432/sprintwell npm run dev
-```
-
-Production build:
-
-```bash
-npm run build
-WEB_DIR=web/dist npm start        # serves the web app and API on :3000
-```
-
-With Docker (app and PostgreSQL): `docker compose up --build`, then open http://localhost:3000.
-
-To put it online without running a server yourself, see **[docs/DEPLOY.md](docs/DEPLOY.md)**.
+To put it online on Cloudflare's free plan, see **[docs/DEPLOY.md](docs/DEPLOY.md)**. The short version is `npx wrangler login`, then `npx wrangler d1 create sprintwell`, then `npm run deploy:cf`.
 
 ## Tests
 
 ```bash
 npm run typecheck
 npm test                 # shared logic and server API/WebSocket tests on SQLite
-npm run test:pg          # the same server tests on PostgreSQL (see below)
+npm run test:pg          # the same server tests on PostgreSQL
+npm run test:cf          # the same API/WebSocket tests against the Cloudflare version (start it first, see docs/DEPLOY.md)
 npm run build && npm run test:e2e   # multi-user browser tests and accessibility checks
 ```
 
 `npm run test:pg` needs a PostgreSQL user that can create databases. It reads `SPRINTWELL_TEST_PG`, which defaults to `postgres://sprintwell:sprintwell@localhost:5432/sprintwell_test`.
 
+To run the browser tests against the Cloudflare version, set `E2E_BASE_URL=http://127.0.0.1:8787` while it is running.
+
 ## Project layout
 
 ```
 shared/   Domain types, retrospective templates, poker decks and statistics, validation schemas
-server/   Fastify API, WebSocket hub, meeting engines, Kysely data layer (SQLite and PostgreSQL)
+server/   Platform-neutral core (API handlers, real-time protocol, meeting engines, Kysely data layer)
+          plus the Node adapter (Fastify, ws, SQLite and PostgreSQL)
+worker/   Cloudflare adapter: Worker (API and static files), TeamRoom Durable Object, D1 migrations
 web/      React app (Vite)
 e2e/      Playwright end-to-end and accessibility tests
 docs/     Deployment, architecture and roadmap

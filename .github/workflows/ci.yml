@@ -32,3 +32,28 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+
+  cloudflare:
+    # Runs the same API, WebSocket and browser tests against the Cloudflare
+    # version (Worker + Durable Objects + D1) in the local Workers runtime.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck -w worker
+      - run: npm run build -w web
+      - run: npm run db:migrate:local -w worker
+      - name: Start wrangler dev
+        working-directory: worker
+        run: |
+          npx wrangler dev --port 8787 --ip 127.0.0.1 --var DISABLE_RATE_LIMIT:1 > ../wrangler.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:8787/healthz && break; sleep 1; done
+      - run: npm run test:cf
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+        env:
+          E2E_BASE_URL: http://127.0.0.1:8787

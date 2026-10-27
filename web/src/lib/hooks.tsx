@@ -1,7 +1,7 @@
 import type { MeetingView, TeamSnapshot, TeamSummaryDTO, UserDTO } from '@sprintwell/shared';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, getToken, setToken } from './api';
-import { socket, type ConnectionState } from './socket';
+import { sockets, type ConnectionState } from './socket';
 
 // ---------------------------------------------------------------------------
 // Notices (visible toasts + screen-reader announcements)
@@ -169,18 +169,16 @@ export function useTeamData(teamId: string): TeamState {
   useEffect(() => {
     setSnap(null);
     void refresh();
-    const unsub = socket.subscribeTeam(teamId);
+    const socket = sockets.team(teamId);
+    const unsub = socket.subscribe();
     const off = socket.on((msg) => {
       if (msg.t === 'team' && msg.teamId === teamId) void refresh();
-    });
-    // After a reconnect, catch up on anything missed.
-    const offState = socket.onState((s) => {
-      if (s === 'online') void refresh();
+      // After a reconnect, catch up on anything missed.
+      if (msg.t === 'ready') void refresh();
     });
     return () => {
       unsub();
       off();
-      offState();
     };
   }, [teamId, refresh]);
 
@@ -227,7 +225,7 @@ export function useAction() {
 // Meetings
 // ---------------------------------------------------------------------------
 
-export function useMeeting(meetingId: string) {
+export function useMeeting(teamId: string, meetingId: string) {
   const [view, setView] = useState<MeetingView | null>(null);
   const [missing, setMissing] = useState(false);
   const offset = useRef(0);
@@ -236,6 +234,7 @@ export function useMeeting(meetingId: string) {
   useEffect(() => {
     setView(null);
     setMissing(false);
+    const socket = sockets.team(teamId);
     const leave = socket.joinMeeting(meetingId);
     const off = socket.on((msg) => {
       if (msg.t === 'meeting' && msg.view.id === meetingId) {
@@ -248,15 +247,15 @@ export function useMeeting(meetingId: string) {
       off();
       leave();
     };
-  }, [meetingId]);
+  }, [teamId, meetingId]);
 
   const send = useCallback(
     async (cmd: Record<string, unknown> & { type: string }): Promise<boolean> => {
-      const r = await socket.command(meetingId, cmd);
+      const r = await sockets.team(teamId).command(meetingId, cmd);
       if (!r.ok && r.error) notify(r.error, 'error');
       return r.ok;
     },
-    [meetingId, notify],
+    [teamId, meetingId, notify],
   );
 
   return { view, missing, send, serverOffset: offset };
@@ -275,8 +274,8 @@ export function useNow(active: boolean, offsetMs = 0, intervalMs = 250): number 
 }
 
 export function useConnection(): ConnectionState {
-  const [state, setState] = useState<ConnectionState>(socket.state);
-  useEffect(() => socket.onState(setState), []);
+  const [state, setState] = useState<ConnectionState>(sockets.state);
+  useEffect(() => sockets.onState(setState), []);
   return state;
 }
 

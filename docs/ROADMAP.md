@@ -2,13 +2,14 @@
 
 This is a working plan, not a commitment. Priorities should follow what teams actually ask for once they use it.
 
-## 0.1: now
+## Now (0.2)
 
 - Planning Poker, retrospectives (ten formats plus custom), Sprint Planning, Daily Scrum, Sprint Review, pairing timer
 - Product Backlog with INVEST and the Definition of Ready, sprint board, burndown, velocity
 - Team charter, actions and impediments, risk register
 - Anonymous identity with sign-in codes for other devices; exports; personal data deletion
 - SQLite and PostgreSQL; Docker; automated tests on both databases; accessibility checks
+- Runs on Cloudflare's free plan (Workers, Durable Objects, D1) as well as Node
 
 ## Next (free core)
 
@@ -19,7 +20,7 @@ This is a working plan, not a commitment. Priorities should follow what teams ac
 - **Welsh and Spanish translations.**
 - **Asynchronous retrospectives and stand-ups.** For teams in different time zones.
 - **Drag-and-drop grouping.** In addition to the current keyboard-accessible "Group with…" control.
-- **Horizontal scaling.** Through PostgreSQL `LISTEN/NOTIFY`, so more than one server instance can run.
+- **Horizontal scaling for the Node version.** Through PostgreSQL `LISTEN/NOTIFY`, so more than one server instance can run. The Cloudflare version already spreads teams across Durable Objects.
 
 ## Possible paid tier ("Sprintwell Plus", for the hosted service)
 
