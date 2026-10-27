@@ -12,7 +12,7 @@ afterAll(async () => {
   await s?.stop();
 });
 
-let nextId = 100;
+let nextId = Math.floor(Math.random() * 1e9);
 const glUser = (name: string) => ({ id: nextId++, username: name.toLowerCase(), name });
 
 describe('Sign in with GitLab', () => {

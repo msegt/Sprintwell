@@ -21,6 +21,7 @@ import {
   createClassBody,
   deviceLinkRedeemBody,
   joinStaffBody,
+  linkGitlabBody,
   updateClassBody,
   gitlabCallbackBody,
   gitlabStartBody,
@@ -42,7 +43,7 @@ import type { MeetingManager } from '../meetings/manager';
 import type { Repo } from '../repo';
 import { activityCounts, listActivity, logActivity, type ActivityEntry } from '../activity';
 import { Classes } from '../classes';
-import { GitlabAuth } from '../gitlab/auth';
+import type { Gitlab } from '../gitlab';
 import { FileResponse, type ApiRequest, type ApiRouter, type RealtimeControl } from './router';
 import { HttpError, badRequest, forbidden, notFound } from '../util';
 
@@ -51,6 +52,7 @@ export interface Deps {
   realtime: RealtimeControl;
   meetings: MeetingManager;
   config: Config;
+  gitlab: Gitlab;
 }
 
 function parse<T>(schema: ZodType<T>, value: unknown): T {
@@ -73,6 +75,7 @@ type Params = Record<string, string>;
 
 export function registerApi(app: ApiRouter, deps: Deps): void {
   const { repo, realtime, meetings, config } = deps;
+  const gitlabSync = deps.gitlab.sync;
 
   async function user(req: ApiRequest): Promise<UserDTO> {
     const token = bearer(req);
@@ -108,7 +111,7 @@ export function registerApi(app: ApiRouter, deps: Deps): void {
 
   // ------------------------------------------------------------ public
 
-  const gitlab = new GitlabAuth(repo, config);
+  const gitlab = deps.gitlab.auth;
   const classes = new Classes(repo);
 
   app.get('/api/config', async () => ({
@@ -403,7 +406,12 @@ export function registerApi(app: ApiRouter, deps: Deps): void {
     const story = await repo.updateStory(teamId!, id!, patch);
     await log(teamId!, u.id, 'story', await describeStoryChange(before, story, patch));
     changed(teamId!);
-    return story;
+    // Estimates go back to the linked GitLab issue straight away (best effort; Sync retries).
+    let gitlabError: string | undefined;
+    if (patch.estimate !== undefined && story.gitlabIid !== null && u.gitlab?.canUseApi) {
+      await gitlabSync.pushEstimate(teamId!, story.id, u.id).catch((e: Error) => (gitlabError = e.message));
+    }
+    return { ...story, ...(gitlabError && { gitlabError }) };
   });
 
   app.delete('/api/teams/:teamId/stories/:id', async (req) => {
@@ -522,6 +530,36 @@ export function registerApi(app: ApiRouter, deps: Deps): void {
     await repo.deleteRisk(teamId!, id!);
     changed(teamId!);
     return { ok: true };
+  });
+
+  // ------------------------------------------------------------ GitLab project sync
+
+  app.post('/api/teams/:teamId/gitlab', async (req) => {
+    const { teamId } = req.params as Params;
+    const { user: u } = await member(req, teamId!);
+    const body = parse(linkGitlabBody, req.body);
+    const status = await gitlabSync.link(teamId!, u.id, body.project, req.origin);
+    await log(teamId!, u.id, 'team', `linked the GitLab project ${status.path}`);
+    changed(teamId!);
+    return status;
+  });
+
+  app.delete('/api/teams/:teamId/gitlab', async (req) => {
+    const { teamId } = req.params as Params;
+    const { user: u } = await admin(req, teamId!);
+    await gitlabSync.unlink(teamId!);
+    await log(teamId!, u.id, 'team', 'unlinked the GitLab project');
+    changed(teamId!);
+    return { ok: true };
+  });
+
+  app.post('/api/teams/:teamId/gitlab/sync', async (req) => {
+    const { teamId } = req.params as Params;
+    const { user: u } = await member(req, teamId!);
+    const result = await gitlabSync.sync(teamId!, u.id);
+    await logActivity(repo.db, { teamId: teamId!, userId: u.id, kind: 'team', summary: 'synced with GitLab', dedupe: `sync:${teamId}:${u.id}:${new Date().toISOString().slice(0, 13)}` });
+    changed(teamId!);
+    return result;
   });
 
   // ------------------------------------------------------------ activity

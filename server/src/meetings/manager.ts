@@ -50,6 +50,8 @@ export interface ManagerOptions {
   evictAfterMs?: number | null;
   /** false: always read meetings from the database (for stateless request handlers). Default true. */
   cache?: boolean;
+  /** Called (without waiting) after Planning Poker saves an estimate to a story, e.g. to write it to GitLab. */
+  onEstimate?: (teamId: string, storyId: string, actorId: string) => Promise<unknown>;
 }
 
 /** Events idle for longer than this end automatically. */
@@ -74,6 +76,7 @@ export class MeetingManager {
   private readonly timers: TimerHost | null;
   private readonly evictAfterMs: number | null;
   private readonly useCache: boolean;
+  private readonly onEstimate: ManagerOptions['onEstimate'];
 
   constructor(
     private readonly repo: Repo,
@@ -83,6 +86,7 @@ export class MeetingManager {
     this.timers = options.timers === undefined ? new TimeoutTimers((id) => void this.fireTimer(id)) : options.timers;
     this.evictAfterMs = options.evictAfterMs === undefined ? 5 * 60_000 : options.evictAfterMs;
     this.useCache = options.cache ?? true;
+    this.onEstimate = options.onEstimate;
   }
 
   async create(teamId: string, actorId: string, input: { kind: MeetingKind; title?: string; sprintId?: string | null; options: Record<string, unknown> }): Promise<string> {
@@ -230,6 +234,11 @@ export class MeetingManager {
       if (teamTouched || listChanged) this.out.notifyTeam(r.teamId);
       const entries = describeCommand(r, runtime.record, actorId, applied);
       if (entries.length) await logActivity(this.repo.db, entries.map((e) => ({ ...e, teamId: r.teamId })));
+      if (r.kind === 'poker' && applied.type === 'finalise' && this.onEstimate) {
+        const before = r.state as { currentItemId: string | null; items: { id: string; storyId: string | null }[] };
+        const storyId = before.items.find((i) => i.id === before.currentItemId)?.storyId;
+        if (storyId) void this.onEstimate(r.teamId, storyId, actorId).catch(() => undefined);
+      }
     });
   }
 

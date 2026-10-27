@@ -10,6 +10,7 @@ import { openDatabase, ping, type DbHandle } from './db';
 import { MeetingManager } from './meetings/manager';
 import { Hub } from './realtime/hub';
 import { Repo } from './repo';
+import { createGitlab } from './gitlab';
 import { registerApi } from './routes/api';
 import { FileResponse, makeRouter } from './routes/router';
 import { HttpError } from './util';
@@ -32,7 +33,8 @@ export async function buildApp(config: Config, opts: { logger?: boolean } = {}):
 
   const repo = new Repo(db.db);
   const hub = new Hub(repo, app.log);
-  const meetings = new MeetingManager(repo, hub);
+  const gitlab = createGitlab(repo, config);
+  const meetings = new MeetingManager(repo, hub, { onEstimate: (teamId, storyId, actorId) => gitlab.sync.pushEstimate(teamId, storyId, actorId) });
   hub.manager = meetings;
 
   await app.register(helmet, {
@@ -91,6 +93,7 @@ export async function buildApp(config: Config, opts: { logger?: boolean } = {}):
     repo,
     meetings,
     config,
+    gitlab,
     realtime: {
       notifyTeam: (teamId) => hub.notifyTeam(teamId),
       revoke: (teamId, userId) => void hub.revoke(teamId, userId),

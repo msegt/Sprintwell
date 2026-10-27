@@ -2,10 +2,10 @@ import { INVEST, ITEM_KINDS, LIMITS, dorItems, getDeck, readinessProblems, shoul
 import '../styles/ready.css';
 import { useState, type FormEvent } from 'react';
 import { api } from '../lib/api';
-import { useAction, useTeam } from '../lib/hooks';
+import { useAction, useNotice, useTeam } from '../lib/hooks';
 import { Badge, Button, ConfirmButton, Field, Icon, Modal } from './ui';
 
-type Draft = Omit<StoryDTO, 'id' | 'position' | 'createdAt' | 'updatedAt' | 'doneAt'>;
+type Draft = Omit<StoryDTO, 'id' | 'position' | 'createdAt' | 'updatedAt' | 'doneAt' | 'gitlabIid'>;
 
 const blank = (sprintId: string | null = null): Draft => ({
   sprintId,
@@ -30,6 +30,7 @@ const tempId = () => Math.random().toString(36).slice(2, 10);
 export function StoryEditor({ story, onClose, defaultSprintId }: { story: StoryDTO | null; onClose(): void; defaultSprintId?: string | null }) {
   const { snap, teamId } = useTeam();
   const run = useAction();
+  const { notify } = useNotice();
   const [d, setD] = useState<Draft>(() => (story ? { ...story } : blank(defaultSprintId ?? null)));
   const [newAc, setNewAc] = useState('');
   const [newTask, setNewTask] = useState('');
@@ -50,6 +51,8 @@ export function StoryEditor({ story, onClose, defaultSprintId }: { story: StoryD
     setBusy(true);
     const ok = await run(() => (story ? api('PATCH', `/api/teams/${teamId}/stories/${story.id}`, body) : api('POST', `/api/teams/${teamId}/stories`, body)), story ? 'Story saved' : 'Story added');
     setBusy(false);
+    const gitlabError = ok && typeof ok === 'object' && 'gitlabError' in ok ? String((ok as { gitlabError: unknown }).gitlabError) : null;
+    if (gitlabError) notify(`Saved in Sprintwell, but the estimate did not reach GitLab: ${gitlabError} Sync with GitLab later to try again.`, 'error');
     if (ok) onClose();
   };
 

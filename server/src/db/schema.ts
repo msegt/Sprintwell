@@ -64,6 +64,7 @@ export interface SprintsTable {
   capacity: string;
   created_at: string;
   closed_at: string | null;
+  gitlab_milestone_id: string | null;
 }
 
 export interface StoriesTable {
@@ -88,6 +89,9 @@ export interface StoriesTable {
   created_at: string;
   updated_at: string;
   done_at: string | null;
+  gitlab_iid: number | null;
+  gitlab_estimate: string | null;
+  gitlab_updated_at: string | null;
 }
 
 export interface ActionsTable {
@@ -186,6 +190,22 @@ export interface ActivityTable {
   dedupe: string | null;
 }
 
+export interface TeamGitlabTable {
+  team_id: string;
+  project_id: string;
+  path: string;
+  web_url: string;
+  /** Address of this Sprintwell server when the project was linked (needed to refresh tokens). */
+  origin: string;
+  linked_by: string;
+  linked_at: string;
+  last_sync_at: string | null;
+  /** GitLab events newer than this have not been read yet. */
+  events_after: string | null;
+  /** 'weight', 'label' or 'unknown': where estimates go in this GitLab. */
+  estimate_field: string;
+}
+
 export interface Database {
   users: UsersTable;
   sessions: SessionsTable;
@@ -203,4 +223,5 @@ export interface Database {
   classes: ClassesTable;
   class_staff: ClassStaffTable;
   activity: ActivityTable;
+  team_gitlab: TeamGitlabTable;
 }

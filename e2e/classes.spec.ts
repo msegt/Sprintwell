@@ -22,7 +22,8 @@ test('a teacher creates class teams, students join with GitLab, and the teacher 
   const invite = await teacher.locator('.class-team').filter({ hasText: 'Team 1' }).locator('.invite-link').innerText();
 
   const ada = await person(browser);
-  await gitlabAs({ id: 7001, username: 'c7001', name: 'Ada Lovelace' });
+  const gid = Math.floor(Math.random() * 1e9);
+  await gitlabAs({ id: gid, username: `c${gid}`, name: 'Ada Lovelace' });
   await ada.goto(invite);
   await expect(ada.getByText('asks everyone to')).toBeVisible();
   await ada.getByRole('button', { name: 'Sign in with GitLab' }).first().click();
@@ -36,7 +37,7 @@ test('a teacher creates class teams, students join with GitLab, and the teacher 
   await expect(ada.getByRole('button', { name: 'Point the telescope', exact: true })).toBeVisible();
 
   await teacher.reload();
-  await expect(teacher.locator('.class-team').filter({ hasText: 'Team 1' }).getByText('@c7001')).toBeVisible();
+  await expect(teacher.locator('.class-team').filter({ hasText: 'Team 1' }).getByText(`@c${gid}`)).toBeVisible();
   await teacher.locator('.class-team').filter({ hasText: 'Team 1' }).getByRole('link', { name: 'Activity' }).click();
   await expect(teacher.getByText('You are viewing this team as teaching staff')).toBeVisible();
   await expect(teacher.locator('.activity-list').getByText('wrote “Point the telescope”')).toBeVisible();

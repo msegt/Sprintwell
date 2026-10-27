@@ -90,6 +90,7 @@ export function toStory(r: Selectable<StoriesTable>): StoryDTO {
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     doneAt: r.done_at,
+    gitlabIid: r.gitlab_iid === null || r.gitlab_iid === undefined ? null : Number(r.gitlab_iid),
   };
 }
 
@@ -428,6 +429,7 @@ export class Repo {
     if (!t) throw notFound('Team not found');
     const members = await this.members(teamId);
     const cls = t.class_id ? await this.classOfTeam(teamId) : null;
+    const gl = await this.db.selectFrom('team_gitlab').select(['path', 'web_url', 'last_sync_at', 'estimate_field']).where('team_id', '=', teamId).executeTakeFirst();
     const settings = { ...DEFAULT_TEAM_SETTINGS, ...parseJson<Partial<TeamSettings>>(t.settings, {}) };
     if (cls) settings.enforceReady = true;
     return {
@@ -439,6 +441,7 @@ export class Repo {
       members,
       myRole: viewerRole,
       classInfo: cls ? { id: cls.id, name: cls.name, requireGitlab: cls.settings.requireGitlab, resources: cls.settings.resources } : null,
+      gitlab: gl ? { path: gl.path, webUrl: gl.web_url, lastSyncAt: gl.last_sync_at, estimateField: gl.estimate_field as 'weight' | 'label' | 'unknown' } : null,
     };
   }
 
@@ -555,6 +558,7 @@ export class Repo {
       capacity: '[]',
       created_at: now(),
       closed_at: null,
+      gitlab_milestone_id: null,
     };
     await this.db.insertInto('sprints').values(row).execute();
     return toSprint(row);
@@ -666,7 +670,7 @@ export class Repo {
     return ids.map((id) => byId.get(id)).filter((s): s is StoryDTO => !!s);
   }
 
-  async createStories(teamId: string, inputs: Omit<StoryDTO, 'id' | 'position' | 'createdAt' | 'updatedAt' | 'doneAt'>[]): Promise<StoryDTO[]> {
+  async createStories(teamId: string, inputs: Omit<StoryDTO, 'id' | 'position' | 'createdAt' | 'updatedAt' | 'doneAt' | 'gitlabIid'>[]): Promise<StoryDTO[]> {
     await this.assertRoom('stories', teamId, inputs.length, LIMITS.storiesPerTeam, 'stories');
     await this.assertMembers(teamId, inputs.flatMap((s) => [s.ownerId, ...s.tasks.map((t) => t.ownerId)]));
     await this.assertReady(teamId, inputs.filter((s) => s.sprintId));
@@ -698,6 +702,9 @@ export class Repo {
         created_at: ts,
         updated_at: ts,
         done_at: s.status === 'done' ? ts : null,
+        gitlab_iid: null,
+        gitlab_estimate: null,
+        gitlab_updated_at: null,
       });
     }
     await this.insertMany(this.db, 'stories', rows);

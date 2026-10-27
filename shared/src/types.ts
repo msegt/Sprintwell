@@ -73,6 +73,16 @@ export interface TeamDTO {
   myRole: TeamRole;
   /** The class this team belongs to, if a teacher created it. */
   classInfo: TeamClassInfo | null;
+  /** The GitLab project linked to this team, if any. */
+  gitlab: TeamGitlabDTO | null;
+}
+
+export interface TeamGitlabDTO {
+  path: string;
+  webUrl: string;
+  lastSyncAt: string | null;
+  /** Where estimates are written: the issue weight, a "points::N" label, or not known until the first write. */
+  estimateField: 'weight' | 'label' | 'unknown';
 }
 
 export interface ResourceLink {
@@ -247,6 +257,8 @@ export interface StoryDTO {
   createdAt: string;
   updatedAt: string;
   doneAt: string | null;
+  /** Issue number in the team's linked GitLab project, if it came from or was synced with GitLab. */
+  gitlabIid: number | null;
 }
 
 export type ActionKind = 'action' | 'impediment';

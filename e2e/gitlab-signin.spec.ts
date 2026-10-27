@@ -5,16 +5,17 @@ test('people can verify themselves with GitLab and sign in with it on another de
   const ada = await person(browser);
   const { teamUrl } = await createTeam(ada, 'Ada', 'GitLab team');
 
-  await gitlabAs({ id: 5001, username: 'c1234567', name: 'Ada Lovelace' });
+  const gid = Math.floor(Math.random() * 1e9);
+  await gitlabAs({ id: gid, username: `c${gid}`, name: 'Ada Lovelace' });
   await ada.goto('/me');
   expect(await seriousViolations(ada), 'profile').toEqual([]);
   await ada.getByRole('button', { name: 'Sign in with GitLab' }).click();
   await ada.waitForURL(/\/me$/);
   await expect(ada.getByText('Signed in with GitLab as')).toBeVisible();
-  await expect(ada.getByText('@c1234567', { exact: true })).toBeVisible();
+  await expect(ada.getByText(`@c${gid}`, { exact: true })).toBeVisible();
 
   await ada.goto(`${teamUrl}/settings`);
-  await expect(ada.getByText('GitLab @c1234567')).toBeVisible();
+  await expect(ada.getByText(`GitLab @c${gid}`)).toBeVisible();
 
   // Another device: no codes needed.
   const laptop = await person(browser);

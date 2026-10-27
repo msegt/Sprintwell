@@ -221,4 +221,29 @@ export const migrations: Record<string, Migration> = {
       await db.schema.createIndex('activity_team_at_idx').on('activity').columns(['team_id', 'at']).execute();
     },
   },
+
+  '005_gitlab_sync': {
+    async up(db: Kysely<any>) {
+      // The GitLab project a team works in.
+      await db.schema
+        .createTable('team_gitlab')
+        .addColumn('team_id', 'text', (c) => c.primaryKey().references('teams.id').onDelete('cascade'))
+        .addColumn('project_id', 'text', (c) => c.notNull())
+        .addColumn('path', 'text', (c) => c.notNull())
+        .addColumn('web_url', 'text', (c) => c.notNull())
+        .addColumn('origin', 'text', (c) => c.notNull())
+        .addColumn('linked_by', 'text', (c) => c.notNull())
+        .addColumn('linked_at', 'text', (c) => c.notNull())
+        .addColumn('last_sync_at', 'text')
+        .addColumn('events_after', 'text')
+        .addColumn('estimate_field', 'text', (c) => c.notNull().defaultTo('unknown'))
+        .execute();
+      await db.schema.alterTable('stories').addColumn('gitlab_iid', 'integer').execute();
+      // The estimate GitLab last had, so sync knows what changed on which side.
+      await db.schema.alterTable('stories').addColumn('gitlab_estimate', 'text').execute();
+      await db.schema.alterTable('stories').addColumn('gitlab_updated_at', 'text').execute();
+      await db.schema.createIndex('stories_gitlab_idx').on('stories').columns(['team_id', 'gitlab_iid']).execute();
+      await db.schema.alterTable('sprints').addColumn('gitlab_milestone_id', 'text').execute();
+    },
+  },
 };
