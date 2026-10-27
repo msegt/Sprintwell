@@ -16,7 +16,7 @@ afterAll(async () => {
   await s?.stop();
 });
 
-let nextGitlabId = 9000;
+let nextGitlabId = Math.floor(Math.random() * 1e9);
 /** A student who has signed in with GitLab. */
 async function student(name: string) {
   const p = await person(s, name);

@@ -1,6 +1,7 @@
 import { DECKS, LIMITS, type TeamSettings } from '@sprintwell/shared';
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
+import { GitlabProjectCard } from '../components/GitlabProject';
 import { HowTo } from '../components/Guide';
 import { Avatar, Badge, Button, ConfirmButton, CopyButton, Field, Icon } from '../components/ui';
 import { PAGE_GUIDES } from '../content/guides';
@@ -69,6 +70,7 @@ export function SettingsPage() {
         </ul>
       </section>
 
+      <GitlabProjectCard />
       {isAdmin ? <TeamSettingsForm /> : <p className="muted">Team admins ({admins.map((a) => a.displayName).join(', ')}) can change the team settings.</p>}
 
       <section className="card" aria-labelledby="data-h">

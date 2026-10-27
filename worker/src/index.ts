@@ -1,11 +1,11 @@
 import { Hono, type Context } from 'hono';
 import { sql } from 'kysely';
-import type { Config } from '../../server/src/config';
 import { MeetingManager } from '../../server/src/meetings/manager';
 import { registerApi } from '../../server/src/routes/api';
 import { FileResponse, makeRouter, type ApiRouter, type RealtimeControl } from '../../server/src/routes/router';
 import { HttpError } from '../../server/src/util';
-import { log, makeRepo, teamRoom, type Env } from './env';
+import { configFromEnv, log, makeRepo, teamRoom, type Env } from './env';
+import { createGitlab } from '../../server/src/gitlab';
 import { RateLimiter } from './rate-limit';
 
 export { TeamRoom } from './team-room';
@@ -44,20 +44,8 @@ function buildApi(env: Env): Hono<AppEnv> {
   const realtime = control(env);
   // Stateless here: every request reads meetings from D1; live state is owned by the TeamRoom objects.
   const meetings = new MeetingManager(repo, { online: () => [], broadcastMeeting: () => undefined, notifyTeam: realtime.notifyTeam }, { timers: null, evictAfterMs: null, cache: false });
-  const config: Config = {
-    port: 0,
-    host: '',
-    databaseUrl: 'd1',
-    publicUrl: '',
-    donationUrl: env.DONATION_URL ?? '',
-    sourceUrl: env.SOURCE_URL ?? '',
-    webDir: '',
-    trustProxy: true,
-    logLevel: 'info',
-    version: '0.3.0',
-    gitlab: { url: (env.GITLAB_URL ?? '').replace(/\/$/, ''), clientId: env.GITLAB_CLIENT_ID ?? '', clientSecret: env.GITLAB_CLIENT_SECRET ?? '' },
-    secret: env.SPRINTWELL_SECRET ?? '',
-  };
+  const config = configFromEnv(env);
+
 
   const router: ApiRouter = makeRouter((method, path, handler, options) => {
     app.on(method, path, async (c: Context<AppEnv>) => {
@@ -88,7 +76,7 @@ function buildApi(env: Env): Hono<AppEnv> {
       return c.json(result as object);
     });
   });
-  registerApi(router, { repo, realtime, meetings, config });
+  registerApi(router, { repo, realtime, meetings, config, gitlab: createGitlab(repo, config) });
 
   app.onError((err, c) => {
     if (err instanceof HttpError) return c.json({ error: err.message, ...(err.details !== undefined && { details: err.details }) }, err.status as 400);

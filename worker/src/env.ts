@@ -1,6 +1,7 @@
 import { Kysely } from 'kysely';
 import { D1Dialect } from 'kysely-d1';
 import type { Database } from '../../server/src/db/schema';
+import type { Config } from '../../server/src/config';
 import { Repo } from '../../server/src/repo';
 import type { TeamRoom } from './team-room';
 
@@ -34,3 +35,20 @@ export const log = {
   warn: (obj: unknown, msg: string) => console.warn(msg, obj),
   error: (obj: unknown, msg: string) => console.error(msg, obj),
 };
+
+export function configFromEnv(env: Env): Config {
+  return {
+    port: 0,
+    host: '',
+    databaseUrl: 'd1',
+    publicUrl: '',
+    donationUrl: env.DONATION_URL ?? '',
+    sourceUrl: env.SOURCE_URL ?? '',
+    webDir: '',
+    trustProxy: true,
+    logLevel: 'info',
+    version: '0.3.0',
+    gitlab: { url: (env.GITLAB_URL ?? '').replace(/\/$/, ''), clientId: env.GITLAB_CLIENT_ID ?? '', clientSecret: env.GITLAB_CLIENT_SECRET ?? '' },
+    secret: env.SPRINTWELL_SECRET ?? '',
+  };
+}

@@ -1,9 +1,12 @@
 import { INVEST, ITEM_KINDS, LIMITS, investScore, isReady, points, shouldSplit, storySentence, type StoryDTO } from '@sprintwell/shared';
 import { useMemo, useState, type FormEvent } from 'react';
+import { Link } from 'react-router';
 import { HowTo } from '../components/Guide';
 import { NewMeetingDialog } from '../components/NewMeeting';
 import { PAGE_GUIDES } from '../content/guides';
 import { useReadyGate } from '../components/ReadyGate';
+import { GitlabSyncButton } from '../components/GitlabProject';
+import { usePublicConfig } from '../lib/config';
 import { StoryEditor } from '../components/StoryEditor';
 import { Badge, Button, Empty, Field, Icon, Modal } from '../components/ui';
 import { api, download } from '../lib/api';
@@ -21,6 +24,7 @@ export function BacklogPage() {
   const [gitlabOpen, setGitlabOpen] = useState(false);
   const [pokerOpen, setPokerOpen] = useState(false);
   const gate = useReadyGate();
+  const config = usePublicConfig();
   usePageTitle('Product Backlog');
 
   const target = snap.sprints.find((s) => s.status === 'planned') ?? snap.sprints.find((s) => s.status === 'active');
@@ -57,7 +61,15 @@ export function BacklogPage() {
             <Icon name="plus" /> New story
           </Button>
           <Button onClick={() => setBulkOpen(true)}>Add several</Button>
-          <Button onClick={() => setGitlabOpen(true)}>Import from GitLab</Button>
+          {snap.team.gitlab ? (
+            <GitlabSyncButton />
+          ) : config?.gitlab.enabled ? (
+            <Link className="btn btn-secondary" to={`/t/${teamId}/settings#gitlab-project-h`}>
+              Link GitLab
+            </Link>
+          ) : (
+            <Button onClick={() => setGitlabOpen(true)}>Import from GitLab</Button>
+          )}
           <Button onClick={() => run(() => download(`/api/teams/${teamId}/stories.csv`, 'stories.csv'))}>
             <Icon name="download" /> CSV
           </Button>
@@ -115,6 +127,7 @@ export function BacklogPage() {
                   <button type="button" className="link-btn story-title" onClick={() => setEditing(s)}>
                     {s.title}
                   </button>
+                  {s.gitlabIid !== null && <span className="muted small"> #{s.gitlabIid}</span>}
                   {storySentence(s) && <p className="small muted">{storySentence(s)}</p>}
                   <div className="row wrap small">
                     {s.estimate ? <Badge tone={shouldSplit(s.estimate, snap.team.settings.splitThreshold) ? 'warn' : 'info'}>{s.estimate} pts</Badge> : <Badge>Not estimated</Badge>}

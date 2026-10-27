@@ -1,7 +1,8 @@
 import { DurableObject } from 'cloudflare:workers';
 import { MeetingManager, type TimerHost } from '../../server/src/meetings/manager';
 import { EMPTY_CONN_STATE, Realtime, type ConnState, type Connection } from '../../server/src/realtime/core';
-import { log, makeRepo, type Env } from './env';
+import { createGitlab } from '../../server/src/gitlab';
+import { configFromEnv, log, makeRepo, type Env } from './env';
 
 interface Attachment {
   teamId: string;
@@ -56,7 +57,8 @@ export class TeamRoom extends DurableObject<Env> {
         },
       };
       // Memory is reclaimed by hibernation, so no idle eviction is needed.
-      this.manager = new MeetingManager(repo, this.realtime, { timers, evictAfterMs: null });
+      const gitlab = createGitlab(repo, configFromEnv(this.env));
+      this.manager = new MeetingManager(repo, this.realtime, { timers, evictAfterMs: null, onEstimate: (team, storyId, actorId) => gitlab.sync.pushEstimate(team, storyId, actorId) });
       this.realtime.manager = this.manager;
     }
     return { realtime: this.realtime, manager: this.manager };

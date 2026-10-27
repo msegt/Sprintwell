@@ -5,3 +5,4 @@ export * from './poker';
 export * from './types';
 export * from './util';
 export * from './ready';
+export * from './gitlab';

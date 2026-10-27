@@ -194,6 +194,8 @@ export const activityQuery = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(100),
 });
 
+export const linkGitlabBody = z.object({ project: z.string().trim().min(3).max(300) });
+
 export const deviceLinkRedeemBody = z.object({ code: z.string().trim().min(6).max(32) });
 
 // ---------------------------------------------------------------------------
