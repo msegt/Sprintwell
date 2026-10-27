@@ -14,6 +14,21 @@ export interface Config {
   trustProxy: boolean;
   logLevel: string;
   version: string;
+  /** Sign in with GitLab and GitLab sync. Disabled unless url, clientId, clientSecret and secret are all set. */
+  gitlab: GitlabSettings;
+  /** Long random value used to encrypt stored GitLab tokens. */
+  secret: string;
+}
+
+export interface GitlabSettings {
+  /** Base URL of the GitLab instance, e.g. https://git.cardiff.ac.uk */
+  url: string;
+  clientId: string;
+  clientSecret: string;
+}
+
+export function gitlabEnabled(config: Pick<Config, 'gitlab' | 'secret'>): boolean {
+  return !!(config.gitlab.url && config.gitlab.clientId && config.gitlab.clientSecret && config.secret.length >= 16);
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -27,7 +42,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     webDir: env.WEB_DIR ?? '',
     trustProxy: env.TRUST_PROXY === 'true' || env.TRUST_PROXY === '1',
     logLevel: env.LOG_LEVEL ?? 'info',
-    version: env.npm_package_version ?? '0.2.0',
+    version: env.npm_package_version ?? '0.3.0',
+    gitlab: {
+      url: (env.GITLAB_URL ?? '').replace(/\/$/, ''),
+      clientId: env.GITLAB_CLIENT_ID ?? '',
+      clientSecret: env.GITLAB_CLIENT_SECRET ?? '',
+    },
+    secret: env.SPRINTWELL_SECRET ?? '',
   };
 }
 

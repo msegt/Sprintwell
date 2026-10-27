@@ -54,7 +54,9 @@ function buildApi(env: Env): Hono<AppEnv> {
     webDir: '',
     trustProxy: true,
     logLevel: 'info',
-    version: '0.2.0',
+    version: '0.3.0',
+    gitlab: { url: (env.GITLAB_URL ?? '').replace(/\/$/, ''), clientId: env.GITLAB_CLIENT_ID ?? '', clientSecret: env.GITLAB_CLIENT_SECRET ?? '' },
+    secret: env.SPRINTWELL_SECRET ?? '',
   };
 
   const router: ApiRouter = makeRouter((method, path, handler, options) => {
@@ -79,7 +81,9 @@ function buildApi(env: Env): Hono<AppEnv> {
       }
       const headers: Record<string, string | undefined> = {};
       c.req.raw.headers.forEach((v, k) => (headers[k] = v));
-      const result = await handler({ params: c.req.param() as Record<string, string>, body, headers, ip });
+      const url = new URL(c.req.url);
+      const query = Object.fromEntries(url.searchParams.entries());
+      const result = await handler({ params: c.req.param() as Record<string, string>, body, headers, ip, query, origin: url.origin });
       if (result instanceof FileResponse) return new Response(result.body, { headers: result.headers });
       return c.json(result as object);
     });

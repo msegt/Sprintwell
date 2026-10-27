@@ -12,6 +12,12 @@ export interface Env {
   SOURCE_URL?: string;
   /** "1" turns off the best-effort rate limits (local testing only). */
   DISABLE_RATE_LIMIT?: string;
+  /** Sign in with GitLab, e.g. https://git.cardiff.ac.uk (a plain variable). */
+  GITLAB_URL?: string;
+  GITLAB_CLIENT_ID?: string;
+  /** Secrets: set with `npx wrangler secret put …`. */
+  GITLAB_CLIENT_SECRET?: string;
+  SPRINTWELL_SECRET?: string;
 }
 
 /** D1 has no interactive transactions, so the repo runs grouped writes in sequence. */

@@ -151,4 +151,33 @@ export const migrations: Record<string, Migration> = {
         .execute();
     },
   },
+
+  '003_gitlab_accounts': {
+    async up(db: Kysely<any>) {
+      // One GitLab identity per person. Tokens are stored encrypted (AES-256-GCM).
+      await db.schema
+        .createTable('gitlab_accounts')
+        .addColumn('user_id', 'text', (c) => c.primaryKey().references('users.id').onDelete('cascade'))
+        .addColumn('gitlab_id', 'text', (c) => c.notNull().unique())
+        .addColumn('username', 'text', (c) => c.notNull())
+        .addColumn('name', 'text', (c) => c.notNull())
+        .addColumn('scopes', 'text', (c) => c.notNull())
+        .addColumn('access_token', 'text', (c) => c.notNull())
+        .addColumn('refresh_token', 'text')
+        .addColumn('expires_at', 'text')
+        .addColumn('created_at', 'text', (c) => c.notNull())
+        .addColumn('updated_at', 'text', (c) => c.notNull())
+        .execute();
+      // Short-lived OAuth "state" values that tie a GitLab redirect back to the request that started it.
+      await db.schema
+        .createTable('oauth_states')
+        .addColumn('state_hash', 'text', (c) => c.primaryKey())
+        .addColumn('verifier', 'text', (c) => c.notNull())
+        .addColumn('purpose', 'text', (c) => c.notNull())
+        .addColumn('user_id', 'text')
+        .addColumn('return_to', 'text', (c) => c.notNull())
+        .addColumn('created_at', 'text', (c) => c.notNull())
+        .execute();
+    },
+  },
 };

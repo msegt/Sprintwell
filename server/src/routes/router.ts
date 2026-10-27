@@ -9,6 +9,10 @@ export interface ApiRequest {
   /** Lower-case header names. */
   headers: Record<string, string | undefined>;
   ip: string;
+  /** Query string parameters (first value of each). */
+  query: Record<string, string>;
+  /** Scheme and host the browser used, e.g. https://sprintwell.example.workers.dev */
+  origin: string;
 }
 
 export interface RouteOptions {

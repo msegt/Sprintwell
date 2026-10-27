@@ -8,6 +8,7 @@ import { GuidePage } from './pages/GuidePage';
 import { HomePage } from './pages/Home';
 import { JoinPage } from './pages/Join';
 import { ProfilePage } from './pages/Profile';
+import { GitlabCallbackPage } from './pages/GitlabCallback';
 import { PrivacyPage, SupportPage } from './pages/Support';
 import { TeamLayout } from './pages/TeamLayout';
 import { OverviewPage } from './pages/Overview';
@@ -68,6 +69,7 @@ function Shell() {
           <Route path="/" element={<HomePage />} />
           <Route path="/join/:code" element={<JoinPage />} />
           <Route path="/me" element={<ProfilePage />} />
+          <Route path="/auth/gitlab/callback" element={<GitlabCallbackPage />} />
           <Route path="/guide" element={<GuidePage />} />
           <Route path="/support" element={<SupportPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />

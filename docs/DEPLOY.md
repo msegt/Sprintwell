@@ -91,11 +91,42 @@ npm run test:cf
 E2E_BASE_URL=http://127.0.0.1:8787 npm run test:e2e
 ```
 
-For tests, start it with rate limits off: `cd worker && npx wrangler dev --port 8787 --var DISABLE_RATE_LIMIT:1`.
+For tests, start it with rate limits off and pointed at the mock GitLab, and start the mock too:
+
+```bash
+npx tsx server/test/mock-gitlab.ts 4010 &
+cd worker && npx wrangler dev --port 8787 --var DISABLE_RATE_LIMIT:1 \
+  --var GITLAB_URL:http://127.0.0.1:4010 --var GITLAB_CLIENT_ID:mock-client-id \
+  --var GITLAB_CLIENT_SECRET:mock-client-secret --var SPRINTWELL_SECRET:local-test-secret-123
+```
+
+(`npm run test:cf` starts its own mock GitLab on port 4010, so for that suite leave the first line out.)
 
 ### Changing the database schema
 
-Add a Kysely migration in `server/src/db/migrations.ts` (used by the Node version). Then write the matching SQL as a new file in `worker/migrations/` (for example `0002_add_x.sql`). A test (`server/test/schema.test.ts`) fails if the two schemas differ.
+Add a Kysely migration in `server/src/db/migrations.ts` (used by the Node version), then run `npm run migration:generate -w worker`. It writes the matching D1 SQL file to `worker/migrations/` and never rewrites files that already exist. A test (`server/test/schema.test.ts`) fails if the two schemas differ.
+
+### Sign in with GitLab (optional)
+
+Sign in with GitLab gives people a verified identity (useful when activity is used as evidence) and is needed for GitLab import and sync. It needs an OAuth application registered on your GitLab instance, for example `git.cardiff.ac.uk`.
+
+1. In GitLab, open **Edit profile → Applications** (or a group's **Settings → Applications**, or ask the GitLab administrators for an instance-wide application) and add an application:
+   - Name: `Sprintwell`
+   - Redirect URI: `https://sprintwell.<your-subdomain>.workers.dev/auth/gitlab/callback` (your app's address followed by `/auth/gitlab/callback`)
+   - Confidential: yes
+   - Scopes: `read_user` and `api`. Sprintwell asks only for `read_user` when people sign in, and asks for `api` separately when someone chooses to allow GitLab access (needed for import and sync).
+2. In `worker/wrangler.jsonc`, set `GITLAB_URL` (e.g. `https://git.cardiff.ac.uk`) and `GITLAB_CLIENT_ID` (the Application ID) under `vars`.
+3. Store the two secrets (they never go in the repository):
+
+   ```bash
+   cd worker
+   npx wrangler secret put GITLAB_CLIENT_SECRET   # the application's Secret
+   npx wrangler secret put SPRINTWELL_SECRET      # any long random text, e.g. from: openssl rand -base64 32
+   ```
+
+4. Deploy again with `npm run deploy:cf`.
+
+`SPRINTWELL_SECRET` encrypts the GitLab tokens stored in D1. If you change it, people simply have to connect GitLab again. GitLab must be reachable from the internet (Cloudflare's servers call it), not only through a VPN. For the Node version, set the same four values as environment variables.
 
 ## Option 2: Node server
 
@@ -121,6 +152,10 @@ The Node version keeps live event state in one process, so run a single instance
 | `SOURCE_URL` | (empty) | Link to the source code (AGPL) |
 | `LOG_LEVEL` | `info` | Fastify log level |
 | `PG_POOL_MAX` | `10` | Maximum PostgreSQL connections |
+| `GITLAB_URL` | (empty) | GitLab instance for Sign in with GitLab, e.g. `https://git.cardiff.ac.uk` |
+| `GITLAB_CLIENT_ID` | (empty) | OAuth Application ID |
+| `GITLAB_CLIENT_SECRET` | (empty) | OAuth application secret |
+| `SPRINTWELL_SECRET` | (empty) | Long random text that encrypts stored GitLab tokens (16+ characters) |
 
 ## Before using it with students
 

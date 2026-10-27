@@ -297,6 +297,7 @@ const PATHS: Record<string, string> = {
   shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
   list: 'M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01',
   book: 'M4 5a2 2 0 012-2h13v16H6a2 2 0 00-2 2zM4 5v16M8 7h7',
+  key: 'M15 7a4 4 0 11-3.9 4.9L4 19v2h3l1-1v-2h2l1.5-1.5M16.5 6.5h.01',
 };
 
 export function Icon({ name, size = 18, label }: { name: keyof typeof PATHS | string; size?: number; label?: string }) {

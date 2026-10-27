@@ -29,7 +29,12 @@
   "vars": {
     "DONATION_URL": "",
     "SOURCE_URL": "",
-    "DISABLE_RATE_LIMIT": ""
+    "DISABLE_RATE_LIMIT": "",
+    // Sign in with GitLab (see docs/DEPLOY.md). Also run:
+    //   npx wrangler secret put GITLAB_CLIENT_SECRET
+    //   npx wrangler secret put SPRINTWELL_SECRET
+    "GITLAB_URL": "",
+    "GITLAB_CLIENT_ID": ""
   },
   "observability": { "enabled": true }
 }
