@@ -296,6 +296,36 @@ describe('Other Scrum events', () => {
   });
 });
 
+describe('ending events', () => {
+  it.skipIf(!!process.env.SPRINTWELL_TEST_URL)('ends events that nobody has touched for hours', async () => {
+    const a = await team(s, 'Ada');
+    const stale = await meeting(a.teamId, a.admin.token, 'retro');
+    const fresh = await meeting(a.teamId, a.admin.token, 'poker');
+    const old = new Date(Date.now() - 7 * 3_600_000).toISOString();
+    await s.repo!.db.updateTable('meetings').set({ updated_at: old }).where('id', '=', stale).execute();
+    s.meetings!.forget(stale);
+    const snap = await s.api('GET', `/api/teams/${a.teamId}`, a.admin.token);
+    const byId = Object.fromEntries((snap.body.meetings as { id: string; endedAt: string | null }[]).map((m) => [m.id, m.endedAt]));
+    expect(byId[stale]).toBeTruthy();
+    expect(byId[fresh]).toBeNull();
+  });
+
+  it('only the facilitator or an admin can end an event, and it can be reopened', async () => {
+    const a = await team(s, 'Ada', 'Bob');
+    const id = await meeting(a.teamId, a.admin.token, 'poker');
+    const ada = await connect(a.admin.token, a.teamId);
+    const bob = await connect(a.members[0]!.token, a.teamId);
+    ada.send({ t: 'join', meetingId: id });
+    bob.send({ t: 'join', meetingId: id });
+    await until(bob, id, () => true);
+    expect((await bob.cmd(id, { type: 'end' })).ok).toBe(false);
+    expect((await ada.cmd(id, { type: 'end' })).ok).toBe(true);
+    await until(bob, id, (v) => !!v.endedAt);
+    expect((await ada.cmd(id, { type: 'reopen' })).ok).toBe(true);
+    await until(bob, id, (v) => !v.endedAt);
+  });
+});
+
 describe('hardening', () => {
   it('refuses to switch identity on an authenticated socket', async () => {
     const { teamId, admin, members } = await team(s, 'Ada', 'Mallory');
