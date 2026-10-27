@@ -1,7 +1,9 @@
 import { LIMITS, type ActionDTO } from '@sprintwell/shared';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
+import { HowTo } from '../components/Guide';
 import { Badge, Button, ConfirmButton, Empty, Field, InlineEdit, formatDate } from '../components/ui';
+import { PAGE_GUIDES } from '../content/guides';
 import { api } from '../lib/api';
 import { useAction, usePageTitle, useTeam } from '../lib/hooks';
 
@@ -16,6 +18,7 @@ export function ActionsPage() {
       <p className="muted">
         Improvement actions usually come from retrospectives; impediments come up in the Daily Scrum. Check the previous actions at the start of every retrospective.
       </p>
+      <HowTo id="actions" guide={PAGE_GUIDES.actions} />
       <NewAction />
       <div className="segmented" role="group" aria-label="Show">
         <button type="button" aria-pressed={show === 'open'} onClick={() => setShow('open')}>

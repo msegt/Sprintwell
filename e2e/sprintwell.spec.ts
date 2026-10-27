@@ -56,7 +56,7 @@ test('a team estimates a story with Planning Poker, with votes hidden until reve
 
   await ada.getByRole('button', { name: 'Estimate 3' }).click();
   await grace.getByRole('button', { name: 'Estimate 13' }).click();
-  await expect(linus.getByText('has voted')).toHaveCount(2);
+  await expect(linus.getByText('has voted', { exact: true })).toHaveCount(2);
   // Linus cannot see the values yet.
   await expect(linus.locator('.seat-card.revealed')).toHaveCount(0);
   await linus.getByRole('button', { name: 'Estimate 5' }).click();
@@ -130,4 +130,28 @@ test('key pages have no serious accessibility violations', async ({ browser }) =
     await ada.waitForTimeout(300);
     expect(await seriousViolations(ada), kind).toEqual([]);
   }
+});
+
+test('dark mode and guides have no serious accessibility violations', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const ctx = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1280, height: 860 } });
+  const ada = await ctx.newPage();
+  await ada.goto('/');
+  expect(await seriousViolations(ada), 'home (dark)').toEqual([]);
+  const { teamUrl } = await createTeam(ada, 'Ada', 'Dark team');
+  await ada.goto(teamUrl);
+  await ada.getByText('Getting started').waitFor();
+  expect(await seriousViolations(ada), 'overview (dark)').toEqual([]);
+  await ada.goto('/guide');
+  await ada.getByRole('heading', { name: 'Sprintwell guide' }).waitFor();
+  expect(await seriousViolations(ada), 'guide (dark)').toEqual([]);
+  await ada.goto(teamUrl);
+  await ada.getByRole('button', { name: /^Planning Poker/ }).click();
+  await ada.getByRole('button', { name: 'Start', exact: true }).click();
+  await ada.waitForURL(/\/m\//);
+  await ada.getByLabel('Story to estimate').fill('Dark story');
+  await ada.getByRole('button', { name: 'Add', exact: true }).click();
+  await ada.getByRole('button', { name: 'Estimate 5' }).click();
+  await expect(ada.getByText('You are facilitating:')).toBeVisible();
+  expect(await seriousViolations(ada), 'poker (dark)').toEqual([]);
 });

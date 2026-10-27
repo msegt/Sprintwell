@@ -4,6 +4,7 @@ import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router';
 import { useEffect } from 'react';
 import { Avatar, Icon } from './components/ui';
 import { MeProvider, NoticeProvider, useConnection, useMe } from './lib/hooks';
+import { GuidePage } from './pages/GuidePage';
 import { HomePage } from './pages/Home';
 import { JoinPage } from './pages/Join';
 import { ProfilePage } from './pages/Profile';
@@ -18,7 +19,10 @@ import { ActionsPage } from './pages/Actions';
 import { RisksPage } from './pages/Risks';
 import { SettingsPage } from './pages/Settings';
 import { MeetingPage } from './meetings/MeetingPage';
+import '@fontsource-variable/inter';
+import '@fontsource-variable/bricolage-grotesque';
 import './styles.css';
+import './theme.css';
 
 function Shell() {
   const { user } = useMe();
@@ -40,7 +44,11 @@ function Shell() {
           <span>Sprintwell</span>
         </Link>
         <nav className="topnav" aria-label="Site">
-          <Link to="/support">Support the project</Link>
+          <Link to="/guide">Guide</Link>
+          <Link to="/support">
+            <Icon name="heart" size={16} /> <span className="hide-sm">Support the project</span>
+            <span className="sr-only sm-only-label">Support the project</span>
+          </Link>
           {user && (
             <Link to="/me" className="me-link">
               <Avatar id={user.id} name={user.displayName} size={30} />
@@ -60,6 +68,7 @@ function Shell() {
           <Route path="/" element={<HomePage />} />
           <Route path="/join/:code" element={<JoinPage />} />
           <Route path="/me" element={<ProfilePage />} />
+          <Route path="/guide" element={<GuidePage />} />
           <Route path="/support" element={<SupportPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/t/:teamId" element={<TeamLayout />}>
@@ -88,6 +97,7 @@ function Shell() {
       </main>
       <footer className="footer">
         <span>Sprintwell is free, open-source software (AGPL-3.0).</span>
+        <Link to="/guide">Guide</Link>
         <Link to="/privacy">Privacy</Link>
         <Link to="/support">
           <Icon name="heart" size={14} /> Donate

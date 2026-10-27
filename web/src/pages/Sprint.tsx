@@ -1,7 +1,9 @@
 import { burndown, points, velocityHistory, type SprintDTO, type StoryDTO, type StoryStatus } from '@sprintwell/shared';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
+import { HowTo } from '../components/Guide';
 import { StoryEditor } from '../components/StoryEditor';
+import { PAGE_GUIDES } from '../content/guides';
 import { Badge, Button, ConfirmButton, Empty, Field, InlineEdit, formatDate, relativeDays } from '../components/ui';
 import { api } from '../lib/api';
 import { useAction, usePageTitle, useTeam } from '../lib/hooks';
@@ -28,8 +30,9 @@ export function SprintPage() {
 
   if (!sprint) {
     return (
-      <div className="page">
+      <div className="page stack">
         <h1>Sprint</h1>
+        <HowTo id="sprint" guide={PAGE_GUIDES.sprint} />
         <Empty title="No sprints yet">
           <p>
             Run <Link to={`/t/${teamId}`}>Sprint Planning</Link> from the overview, or create a sprint below.
@@ -64,6 +67,8 @@ export function SprintPage() {
           <NewSprint compact onCreated={setSprintId} />
         </div>
       </div>
+
+      <HowTo id="sprint" guide={PAGE_GUIDES.sprint} />
 
       <section className="card stack">
         <div className="row wrap">

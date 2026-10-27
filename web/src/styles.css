@@ -2093,3 +2093,133 @@ main:focus-visible {
 .sentence-grid label .input {
   font-weight: 400;
 }
+
+/* ------------------------------------------------------------------ in-app guidance */
+
+.howto {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--info);
+  border-radius: var(--radius);
+}
+.howto > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+  color: var(--text);
+  min-height: 44px;
+}
+.howto > summary::-webkit-details-marker {
+  display: none;
+}
+.howto > summary .icon {
+  color: var(--info);
+  flex: none;
+}
+.howto-toggle {
+  margin-left: auto;
+  font-weight: 500;
+}
+.howto-body {
+  padding: 0 1.25rem 0.75rem 1.25rem;
+  font-size: 0.95rem;
+}
+.guide-purpose {
+  color: var(--text-muted);
+}
+.guide-steps {
+  margin: 0 0 0.75rem;
+  padding-left: 1.4rem;
+}
+.guide-steps li {
+  margin-bottom: 0.3rem;
+}
+.guide-tips-title {
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin: 0.5rem 0 0.25rem;
+}
+.guide-tips {
+  margin: 0 0 0.5rem;
+  padding-left: 1.2rem;
+  color: var(--text-muted);
+}
+.step-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.9rem;
+}
+.step-hint p {
+  margin: 0;
+  flex: 1 1 320px;
+}
+.getting-started .gs-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 0.6rem 1.5rem;
+}
+.gs-list li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.6rem;
+  align-items: start;
+}
+.gs-mark {
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.1rem;
+}
+.gs-list li.done .gs-mark {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}
+.gs-list li.done a {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+.guide-page h2 {
+  margin-top: 2rem;
+}
+.guide-section {
+  margin: 1.25rem 0 1.75rem;
+}
+.guide-section .table {
+  font-size: 0.88rem;
+}
+.guide-toc ul {
+  margin: 0 0 0.5rem;
+  padding-left: 1.2rem;
+}
+@media print {
+  .howto,
+  .step-hint,
+  .getting-started {
+    display: none !important;
+  }
+}
+.meeting > .howto {
+  margin-bottom: 1.25rem;
+}

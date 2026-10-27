@@ -24,6 +24,7 @@ It was designed around how Scrum (2020 Scrum Guide) and Extreme Programming prac
 | **Actions and impediments** | Owners, due dates and links back to the event they came from. Retrospectives open by reviewing them. |
 | **Risk register** | Likelihood × impact heat map, with legal, ethical, social, professional, security and technical categories, countermeasures, owners and status. |
 | **Facilitation** | Every event has a shared timer, presence, a step-by-step flow, hand-over or take-over of the facilitator role (so it can rotate), and a Markdown summary export. |
+| **Built-in guidance** | Every page and event has a short "How this works" panel. During events, a hint bar tells the facilitator and everyone else what to do in the current step, with a suggested timebox and a one-click timer. New teams get a Getting started checklist, and `/guide` gathers everything on one page you can link from a course site. |
 | **Data** | Full team export as JSON, personal data export and deletion. No tracking. |
 
 Accessibility is a design goal, not an add-on. Everything works from the keyboard, nothing relies on colour alone, step changes and reveals are announced to screen readers, reduced-motion settings are respected and there is a dark mode. End-to-end tests run axe-core on the main pages and events and fail on any serious or critical WCAG 2.1 AA violation. Automated checks only catch some kinds of problem, so testing with real assistive-technology users is still needed.
@@ -92,4 +93,4 @@ More detail is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Plans, including
 
 Copyright © 2026 Maria Galvez Trigo.
 
-Licensed under the GNU Affero General Public License v3.0 only (see [LICENSE](LICENSE)). Anyone can run, study, change and share Sprintwell. Anyone who runs a modified version as a network service must offer its source code to that service's users; set `SOURCE_URL` so the app links to it.
+Licensed under the GNU Affero General Public License v3.0 only (see [LICENSE](LICENSE)). The bundled typefaces, Inter and Bricolage Grotesque (via Fontsource), are licensed under the SIL Open Font License 1.1. Anyone can run, study, change and share Sprintwell. Anyone who runs a modified version as a network service must offer its source code to that service's users; set `SOURCE_URL` so the app links to it.

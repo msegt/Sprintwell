@@ -1,6 +1,8 @@
 import { KERTH_ATTRIBUTION, KERTH_PRIME_DIRECTIVE, LIMITS, type CharterItemDTO, type CharterKind } from '@sprintwell/shared';
 import { useState, type FormEvent } from 'react';
+import { HowTo } from '../components/Guide';
 import { Button, Icon, InlineEdit, formatDate } from '../components/ui';
+import { PAGE_GUIDES } from '../content/guides';
 import { api } from '../lib/api';
 import { useAction, usePageTitle, useTeam } from '../lib/hooks';
 
@@ -37,6 +39,9 @@ export function CharterPage() {
           {lastUpdated && <p className="small muted">Last changed {formatDate(lastUpdated)}</p>}
         </div>
         <Button onClick={() => window.print()}>Print</Button>
+      </div>
+      <div className="no-print">
+        <HowTo id="charter" guide={PAGE_GUIDES.charter} />
       </div>
       <blockquote className="prime-directive">
         <p>{KERTH_PRIME_DIRECTIVE}</p>

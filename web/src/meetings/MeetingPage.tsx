@@ -1,7 +1,9 @@
 import { MEETING_INFO, PHASES, type MeetingView } from '@sprintwell/shared';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
+import { HowTo, StepHint } from '../components/Guide';
 import { Avatar, Badge, Button, ConfirmButton, Icon, InlineEdit, Modal, formatDuration } from '../components/ui';
+import { MEETING_GUIDES } from '../content/guides';
 import { download } from '../lib/api';
 import { useAction, useMeeting, useNotice, useNow, usePageTitle, useTeam } from '../lib/hooks';
 import { DailyRoom } from './DailyRoom';
@@ -59,6 +61,7 @@ export function MeetingPage() {
     <Room.Provider value={ctx}>
       <div className={`page meeting meeting-${view.kind}`}>
         <MeetingHeader />
+        <HowTo id={`event-${view.kind}`} guide={MEETING_GUIDES[view.kind]} />
         <div className="meeting-body">
           {view.kind === 'poker' && <PokerRoom />}
           {view.kind === 'retro' && <RetroRoom />}
@@ -157,6 +160,8 @@ function MeetingHeader() {
           )}
         </nav>
       )}
+
+      <StepHint kind={view.kind} phase={view.phase} isFacilitator={isFacilitator} ended={ended} onStartTimer={(seconds) => void send({ type: 'timerStart', seconds })} />
 
       <Modal open={manage} onClose={() => setManage(false)} title="Manage this event">
         <div className="stack">

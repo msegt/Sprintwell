@@ -1,6 +1,8 @@
 import { INVEST, LIMITS, investScore, isReady, points, shouldSplit, storySentence, type StoryDTO } from '@sprintwell/shared';
 import { useMemo, useState, type FormEvent } from 'react';
+import { HowTo } from '../components/Guide';
 import { NewMeetingDialog } from '../components/NewMeeting';
+import { PAGE_GUIDES } from '../content/guides';
 import { StoryEditor } from '../components/StoryEditor';
 import { Badge, Button, Empty, Field, Icon, Modal } from '../components/ui';
 import { api, download } from '../lib/api';
@@ -59,6 +61,8 @@ export function BacklogPage() {
           </Button>
         </div>
       </div>
+
+      <HowTo id="backlog" guide={PAGE_GUIDES.backlog} />
 
       <div className="row between wrap">
         <div className="segmented" role="group" aria-label="Show">

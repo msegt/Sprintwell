@@ -1,7 +1,9 @@
 import { DECKS, LIMITS, type TeamSettings } from '@sprintwell/shared';
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
+import { HowTo } from '../components/Guide';
 import { Avatar, Badge, Button, ConfirmButton, CopyButton, Field, Icon } from '../components/ui';
+import { PAGE_GUIDES } from '../content/guides';
 import { api, download } from '../lib/api';
 import { useAction, useMe, usePageTitle, useTeam } from '../lib/hooks';
 
@@ -17,6 +19,7 @@ export function SettingsPage() {
   return (
     <div className="page stack">
       <h1>Team</h1>
+      <HowTo id="team" guide={PAGE_GUIDES.team} />
       <section className="card" aria-labelledby="invite-h">
         <h2 id="invite-h">Invite people</h2>
         <p className="muted small">Anyone with this link can join the team. Share it only with your team, and create a new link if it leaks.</p>

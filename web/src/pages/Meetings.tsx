@@ -1,7 +1,9 @@
 import { MEETING_INFO, PHASES, type MeetingKind } from '@sprintwell/shared';
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { KIND_ORDER, NewMeetingDialog } from '../components/NewMeeting';
+import { HowTo } from '../components/Guide';
+import { KIND_ICON, KIND_ORDER, NewMeetingDialog } from '../components/NewMeeting';
+import { PAGE_GUIDES } from '../content/guides';
 import { Badge, Button, Empty, Icon, formatDate } from '../components/ui';
 import { download } from '../lib/api';
 import { useAction, usePageTitle, useTeam } from '../lib/hooks';
@@ -38,6 +40,7 @@ export function MeetingsPage() {
           ))}
         </div>
       </div>
+      <HowTo id="events" guide={PAGE_GUIDES.events} />
       <div className="segmented" role="group" aria-label="Filter events">
         {(['all', ...KIND_ORDER] as const).map((k) => (
           <button key={k} type="button" aria-pressed={filter === k} onClick={() => setFilter(k)}>
@@ -53,8 +56,11 @@ export function MeetingsPage() {
         ) : (
           <ul className="meeting-list">
             {live.map((m) => (
-              <li key={m.id} className="meeting-row">
-                <div>
+              <li key={m.id} className={`meeting-row kind-${m.kind}`}>
+                <span className="event-icon small-icon" aria-hidden="true">
+                  <Icon name={KIND_ICON[m.kind]} size={16} />
+                </span>
+                <div className="meeting-row-main">
                   <Link to={`/t/${teamId}/m/${m.id}`} className="meeting-title">
                     {m.title}
                   </Link>
@@ -78,8 +84,11 @@ export function MeetingsPage() {
         ) : (
           <ul className="meeting-list">
             {past.map((m) => (
-              <li key={m.id} className="meeting-row">
-                <div>
+              <li key={m.id} className={`meeting-row kind-${m.kind}`}>
+                <span className="event-icon small-icon" aria-hidden="true">
+                  <Icon name={KIND_ICON[m.kind]} size={16} />
+                </span>
+                <div className="meeting-row-main">
                   <Link to={`/t/${teamId}/m/${m.id}`} className="meeting-title">
                     {m.title}
                   </Link>

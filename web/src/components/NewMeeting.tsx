@@ -7,6 +7,16 @@ import { Button, Field, Modal } from './ui';
 
 export const KIND_ORDER: MeetingKind[] = ['planning', 'daily', 'review', 'retro', 'poker', 'pairing'];
 
+/** Icon for each kind of event (see the Icon component). */
+export const KIND_ICON: Record<MeetingKind, string> = {
+  planning: 'calendar',
+  daily: 'sun',
+  review: 'present',
+  retro: 'loop',
+  poker: 'cards',
+  pairing: 'pair',
+};
+
 export function NewMeetingDialog({ kind, open, onClose, presetStoryIds }: { kind: MeetingKind | null; open: boolean; onClose(): void; presetStoryIds?: string[] }) {
   const { snap, teamId, me } = useTeam();
   const navigate = useNavigate();

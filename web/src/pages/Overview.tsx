@@ -1,7 +1,9 @@
 import { MEETING_INFO, averageVelocity, points, type MeetingKind } from '@sprintwell/shared';
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { KIND_ORDER, NewMeetingDialog } from '../components/NewMeeting';
+import { GettingStarted, HowTo } from '../components/Guide';
+import { KIND_ICON, KIND_ORDER, NewMeetingDialog } from '../components/NewMeeting';
+import { PAGE_GUIDES } from '../content/guides';
 import { Badge, Button, Empty, Icon, formatDate, relativeDays } from '../components/ui';
 import { api } from '../lib/api';
 import { useAction, usePageTitle, useTeam } from '../lib/hooks';
@@ -23,6 +25,7 @@ export function OverviewPage() {
 
   return (
     <div className="page stack">
+      <GettingStarted snap={snap} teamId={teamId} />
       <section className="card sprint-card" aria-labelledby="sprint-heading">
         {active ? (
           <>
@@ -38,9 +41,16 @@ export function OverviewPage() {
                 </Link>
               </div>
             </div>
-            <p className="sprint-goal">
-              <strong>Sprint Goal:</strong> {active.goal || <span className="muted">Not set yet. Every sprint needs a goal: why is it valuable?</span>}
-            </p>
+            <div className="sprint-overview">
+              <div className="ring" style={{ ['--p' as string]: total ? Math.round((done / total) * 100) : 0 }} role="img" aria-label={`${total ? Math.round((done / total) * 100) : 0}% of story points done`}>
+                <span className="ring-label" aria-hidden="true">
+                  {total ? Math.round((done / total) * 100) : 0}%<small>done</small>
+                </span>
+              </div>
+              <p className="sprint-goal">
+                <strong>Sprint Goal:</strong> {active.goal || <span className="muted">Not set yet. Every sprint needs a goal: why is it valuable?</span>}
+              </p>
+            </div>
             <div className="progress-row">
               <div className="progress" role="progressbar" aria-label="Story points done" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
                 <span style={{ width: total ? `${(done / total) * 100}%` : 0 }} />
@@ -71,7 +81,10 @@ export function OverviewPage() {
         <ul className="event-grid">
           {KIND_ORDER.map((k) => (
             <li key={k}>
-              <button type="button" className={`event-tile event-${k}`} onClick={() => setKind(k)}>
+              <button type="button" className={`event-tile event-${k} kind-${k}`} onClick={() => setKind(k)}>
+                <span className="event-icon" aria-hidden="true">
+                  <Icon name={KIND_ICON[k]} size={20} />
+                </span>
                 <span className="event-name">{MEETING_INFO[k].name}</span>
                 <span className="small">{MEETING_INFO[k].summary}</span>
               </button>
@@ -79,6 +92,8 @@ export function OverviewPage() {
           ))}
         </ul>
       </section>
+
+      <HowTo id="overview" guide={PAGE_GUIDES.overview} />
 
       <div className="grid-2">
         <section className="card" aria-labelledby="live-heading">

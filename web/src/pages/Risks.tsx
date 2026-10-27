@@ -1,6 +1,8 @@
 import { LEVEL_NAMES, LIMITS, RISK_CATEGORIES, riskBand, riskScore, type RiskDTO, type RiskLevel } from '@sprintwell/shared';
 import { useState, type FormEvent } from 'react';
+import { HowTo } from '../components/Guide';
 import { Badge, Button, ConfirmButton, Empty, Field, Icon, Modal } from '../components/ui';
+import { PAGE_GUIDES } from '../content/guides';
 import { api } from '../lib/api';
 import { useAction, usePageTitle, useTeam } from '../lib/hooks';
 
@@ -36,6 +38,8 @@ export function RisksPage() {
           <Icon name="plus" /> Add risk
         </Button>
       </div>
+
+      <HowTo id="risks" guide={PAGE_GUIDES.risks} />
 
       <div className="risk-layout">
         <section className="card" aria-labelledby="heat-h">

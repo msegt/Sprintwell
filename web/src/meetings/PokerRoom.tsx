@@ -10,15 +10,20 @@ export function PokerRoom() {
   const current = data.items.find((i) => i.id === data.currentItemId) ?? null;
   const { announce } = useNotice();
   const wasRevealed = useRef(false);
+  const [celebrate, setCelebrate] = useState(0);
   useEffect(() => {
-    if (current?.revealed && !wasRevealed.current) announce('Votes revealed');
+    if (current?.revealed && !wasRevealed.current) {
+      announce(current.stats?.consensus ? `Votes revealed: everyone chose ${current.stats.mode[0]}` : 'Votes revealed');
+      if (current.stats?.consensus && current.voted.length > 1) setCelebrate(Date.now());
+    }
     wasRevealed.current = !!current?.revealed;
-  }, [current?.revealed, announce]);
+  }, [current?.revealed, current?.stats, current?.voted.length, announce]);
 
   if (view.phase === 'summary' || ended) return <PokerSummary data={data} />;
 
   return (
     <div className="poker-layout">
+      {celebrate > 0 && <Confetti key={celebrate} />}
       <aside className="poker-items card" aria-labelledby="items-h">
         <h2 id="items-h">Stories ({data.items.filter((i) => i.finalEstimate).length}/{data.items.length} estimated)</h2>
         {data.items.length === 0 ? (
@@ -193,6 +198,7 @@ function CurrentItem({ item, data }: { item: PokerItemView; data: PokerView }) {
               key={c}
               type="button"
               className={`poker-card${item.myVote === c ? ' selected' : ''}`}
+              data-card={c}
               aria-pressed={item.myVote === c}
               disabled={observing}
               aria-label={c === UNSURE ? 'Not sure' : c === COFFEE ? 'I need a break' : `Estimate ${c}`}
@@ -346,6 +352,34 @@ function PokerSummary({ data }: { data: PokerView }) {
           </Button>
         </div>
       )}
+    </div>
+  );
+}
+
+const CONFETTI_COLOURS = ['#ff8a3d', '#3949c7', '#0b7a66', '#f2a71b', '#9333ea', '#e0482b'];
+
+/** A short burst of confetti when the team reaches consensus (hidden with reduced motion). */
+function Confetti() {
+  const [pieces] = useState(() =>
+    Array.from({ length: 48 }, (_, i) => ({
+      left: Math.random() * 100,
+      dx: `${(Math.random() - 0.5) * 240}px`,
+      rot: `${Math.random() * 720 - 360}deg`,
+      delay: Math.random() * 0.25,
+      colour: CONFETTI_COLOURS[i % CONFETTI_COLOURS.length]!,
+    })),
+  );
+  const [done, setDone] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setDone(true), 2200);
+    return () => window.clearTimeout(t);
+  }, []);
+  if (done) return null;
+  return (
+    <div className="confetti" aria-hidden="true">
+      {pieces.map((p, i) => (
+        <i key={i} style={{ left: `${p.left}%`, background: p.colour, animationDelay: `${p.delay}s`, ['--dx' as string]: p.dx, ['--rot' as string]: p.rot }} />
+      ))}
     </div>
   );
 }
