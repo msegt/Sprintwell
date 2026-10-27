@@ -38,8 +38,13 @@ import { HttpError, badRequest, forbidden, hashToken, newDeviceCode, newId, newI
 
 export const FORMER_MEMBER = 'Former member';
 
-export function toUser(row: Selectable<UsersTable>): UserDTO {
-  return { id: row.id, displayName: row.display_name, hasEmail: !!row.email };
+export function toUser(row: Selectable<UsersTable>, gitlab: { username: string; name: string; scopes: string } | null = null): UserDTO {
+  return {
+    id: row.id,
+    displayName: row.display_name,
+    hasEmail: !!row.email,
+    gitlab: gitlab ? { username: gitlab.username, name: gitlab.name, canUseApi: gitlab.scopes.split(/\s+/).includes('api') } : null,
+  };
 }
 
 export function toCharter(r: Selectable<CharterItemsTable>): CharterItemDTO {
@@ -176,7 +181,7 @@ export class Repo {
     const ts = now();
     await this.db.insertInto('users').values({ id, display_name: displayName, email: null, created_at: ts, deleted_at: null }).execute();
     const token = await this.createSession(id);
-    return { user: { id, displayName, hasEmail: false }, token };
+    return { user: { id, displayName, hasEmail: false, gitlab: null }, token };
   }
 
   async createSession(userId: string): Promise<string> {
@@ -190,7 +195,8 @@ export class Repo {
     const row = await this.db
       .selectFrom('sessions')
       .innerJoin('users', 'users.id', 'sessions.user_id')
-      .select(['users.id', 'users.display_name', 'users.email', 'users.created_at', 'users.deleted_at', 'sessions.id as session_id', 'sessions.last_seen_at'])
+      .leftJoin('gitlab_accounts as g', 'g.user_id', 'users.id')
+      .select(['users.id', 'users.display_name', 'users.email', 'users.created_at', 'users.deleted_at', 'sessions.id as session_id', 'sessions.last_seen_at', 'g.username', 'g.name', 'g.scopes'])
       .where('sessions.token_hash', '=', hashToken(token))
       .executeTakeFirst();
     if (!row || row.deleted_at) return null;
@@ -198,7 +204,18 @@ export class Repo {
     if (Date.now() - Date.parse(row.last_seen_at) > 3_600_000) {
       await this.db.updateTable('sessions').set({ last_seen_at: now() }).where('id', '=', row.session_id).execute();
     }
-    return { id: row.id, displayName: row.display_name, hasEmail: !!row.email };
+    return toUser(row, row.username ? { username: row.username, name: row.name ?? row.username, scopes: row.scopes ?? '' } : null);
+  }
+
+  async userById(userId: string): Promise<UserDTO | null> {
+    const row = await this.db
+      .selectFrom('users')
+      .leftJoin('gitlab_accounts as g', 'g.user_id', 'users.id')
+      .select(['users.id', 'users.display_name', 'users.email', 'users.created_at', 'users.deleted_at', 'g.username', 'g.name', 'g.scopes'])
+      .where('users.id', '=', userId)
+      .executeTakeFirst();
+    if (!row || row.deleted_at) return null;
+    return toUser(row, row.username ? { username: row.username, name: row.name ?? row.username, scopes: row.scopes ?? '' } : null);
   }
 
   async deleteSession(token: string): Promise<void> {
@@ -225,7 +242,7 @@ export class Repo {
     if (link.expires_at < now()) return null;
     const user = await this.db.selectFrom('users').selectAll().where('id', '=', link.user_id).executeTakeFirst();
     if (!user || user.deleted_at) return null;
-    return { user: toUser(user), token: await this.createSession(user.id) };
+    return { user: (await this.userById(user.id))!, token: await this.createSession(user.id) };
   }
 
   /**
@@ -242,6 +259,7 @@ export class Repo {
     }
     await this.db.deleteFrom('sessions').where('user_id', '=', userId).execute();
     await this.db.deleteFrom('device_links').where('user_id', '=', userId).execute();
+    await this.db.deleteFrom('gitlab_accounts').where('user_id', '=', userId).execute();
     await this.db.updateTable('users').set({ display_name: FORMER_MEMBER, email: null, deleted_at: now() }).where('id', '=', userId).execute();
     return affected;
   }
@@ -378,11 +396,12 @@ export class Repo {
     const rows = await this.db
       .selectFrom('memberships as m')
       .innerJoin('users as u', 'u.id', 'm.user_id')
-      .select(['u.id', 'u.display_name', 'm.role', 'm.joined_at'])
+      .leftJoin('gitlab_accounts as g', 'g.user_id', 'u.id')
+      .select(['u.id', 'u.display_name', 'm.role', 'm.joined_at', 'g.username'])
       .where('m.team_id', '=', teamId)
       .orderBy('m.joined_at')
       .execute();
-    return rows.map((r) => ({ userId: r.id, displayName: r.display_name, role: r.role as TeamRole, joinedAt: r.joined_at }));
+    return rows.map((r) => ({ userId: r.id, displayName: r.display_name, role: r.role as TeamRole, joinedAt: r.joined_at, gitlabUsername: r.username ?? null }));
   }
 
   /** Names for everyone who ever appeared in the team's data, including people who left. */

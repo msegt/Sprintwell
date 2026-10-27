@@ -1,6 +1,7 @@
 import { LIMITS } from '@sprintwell/shared';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
+import { GitlabButton } from '../components/GitlabButton';
 import { Button, Field } from '../components/ui';
 import { api } from '../lib/api';
 import { useAction, useMe, usePageTitle } from '../lib/hooks';
@@ -57,16 +58,22 @@ export function JoinPage() {
         </p>
         {user ? (
           <p>
-            You will join as <strong>{user.displayName}</strong>.
+            You will join as <strong>{user.displayName}</strong>
+            {user.gitlab && <> (GitLab @{user.gitlab.username})</>}.
           </p>
         ) : (
           <Field label="Your name" hint="Shown to your teammates. You can change it later.">
             {(id, d) => <input id={id} aria-describedby={d} className="input" required autoFocus maxLength={LIMITS.displayName} value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />}
           </Field>
         )}
-        <Button type="submit" variant="primary" busy={busy}>
-          Join team
-        </Button>
+        <div className="row wrap">
+          <Button type="submit" variant="primary" busy={busy}>
+            Join team
+          </Button>
+          {!user?.gitlab && (
+            <GitlabButton returnTo={`/join/${code}`}>{user ? 'Verify with GitLab first' : 'Sign in with GitLab instead'}</GitlabButton>
+          )}
+        </div>
         {!user && (
           <p className="small muted">
             Sprintwell remembers you on this device. Read the <Link to="/privacy">privacy notes</Link>.

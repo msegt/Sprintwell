@@ -131,6 +131,30 @@ export interface MeetingsTable {
   ended_at: string | null;
 }
 
+export interface GitlabAccountsTable {
+  user_id: string;
+  gitlab_id: string;
+  username: string;
+  name: string;
+  scopes: string;
+  /** Encrypted. */
+  access_token: string;
+  /** Encrypted. */
+  refresh_token: string | null;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OauthStatesTable {
+  state_hash: string;
+  verifier: string;
+  purpose: string;
+  user_id: string | null;
+  return_to: string;
+  created_at: string;
+}
+
 export interface Database {
   users: UsersTable;
   sessions: SessionsTable;
@@ -143,4 +167,6 @@ export interface Database {
   actions: ActionsTable;
   risks: RisksTable;
   meetings: MeetingsTable;
+  gitlab_accounts: GitlabAccountsTable;
+  oauth_states: OauthStatesTable;
 }

@@ -14,6 +14,8 @@ import {
   createSessionBody,
   createTeamBody,
   deviceLinkRedeemBody,
+  gitlabCallbackBody,
+  gitlabStartBody,
   joinTeamBody,
   reorderBody,
   riskBody,
@@ -30,6 +32,7 @@ import type { ZodType } from 'zod';
 import type { Config } from '../config';
 import type { MeetingManager } from '../meetings/manager';
 import type { Repo } from '../repo';
+import { GitlabAuth } from '../gitlab/auth';
 import { FileResponse, type ApiRequest, type ApiRouter, type RealtimeControl } from './router';
 import { HttpError, badRequest, forbidden, notFound } from '../util';
 
@@ -86,12 +89,40 @@ export function registerApi(app: ApiRouter, deps: Deps): void {
 
   // ------------------------------------------------------------ public
 
+  const gitlab = new GitlabAuth(repo, config);
+
   app.get('/api/config', async () => ({
     appName: 'Sprintwell',
     version: config.version,
     donationUrl: config.donationUrl,
     sourceUrl: config.sourceUrl,
+    gitlab: { enabled: gitlab.enabled, url: gitlab.enabled ? config.gitlab.url : '' },
   }));
+
+  // ------------------------------------------------------------ GitLab sign-in
+
+  app.post('/api/auth/gitlab/start', strictLimit, async (req) => {
+    const body = parse(gitlabStartBody, req.body);
+    const token = bearer(req);
+    const current = token ? await repo.userForToken(token) : null;
+    return { url: await gitlab.start({ purpose: body.purpose, userId: current?.id ?? null, returnTo: body.returnTo, origin: req.origin }) };
+  });
+
+  app.post('/api/auth/gitlab/callback', strictLimit, async (req) => {
+    const body = parse(gitlabCallbackBody, req.body);
+    const token = bearer(req);
+    const current = token ? await repo.userForToken(token) : null;
+    const result = await gitlab.finish({ code: body.code, state: body.state, origin: req.origin, currentUserId: current?.id ?? null });
+    for (const t of await repo.teamsForUser(result.user.id)) changed(t.id);
+    return result;
+  });
+
+  app.delete('/api/me/gitlab', async (req) => {
+    const u = await user(req);
+    await gitlab.disconnect(u.id);
+    for (const t of await repo.teamsForUser(u.id)) changed(t.id);
+    return { ok: true };
+  });
 
   app.get('/api/invites/:code', strictLimit, async (req) => {
     const { code } = req.params as Params;

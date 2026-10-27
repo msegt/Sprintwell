@@ -3,7 +3,8 @@ import type { MeetingView, ServerMessage } from '@sprintwell/shared';
 import pg from 'pg';
 import WebSocket from 'ws';
 import { buildApp, type App } from '../src/app';
-import { loadConfig } from '../src/config';
+import { loadConfig, type Config } from '../src/config';
+import { startMockGitlab, type MockGitlab } from './mock-gitlab';
 
 process.env.SPRINTWELL_DISABLE_RATE_LIMIT = '1';
 
@@ -36,7 +37,7 @@ async function apiCall(base: string, method: string, path: string, token?: strin
  * Starts an in-process Node server, or, when SPRINTWELL_TEST_URL is set, points
  * the same tests at an already running server (e.g. `wrangler dev` for Cloudflare).
  */
-export async function startServer(): Promise<TestServer> {
+export async function startServer(overrides: Partial<Config> = {}): Promise<TestServer> {
   const remote = process.env.SPRINTWELL_TEST_URL;
   if (remote) {
     return { base: remote.replace(/\/$/, ''), dialect: 'remote', api: (m, p, t, b) => apiCall(remote.replace(/\/$/, ''), m, p, t, b), stop: async () => undefined };
@@ -57,7 +58,7 @@ export async function startServer(): Promise<TestServer> {
       await c.end();
     };
   }
-  const app = await buildApp({ ...loadConfig({}), databaseUrl, webDir: '' }, { logger: false });
+  const app = await buildApp({ ...loadConfig({}), databaseUrl, webDir: '', ...overrides }, { logger: false });
   await app.app.listen({ port: 0, host: '127.0.0.1' });
   const address = app.app.server.address();
   const port = typeof address === 'object' && address ? address.port : 0;
@@ -194,4 +195,30 @@ export async function readyFields(s: TestServer, teamId: string, token: string) 
     invest: { I: true, N: true, V: true, E: true, S: true, T: true },
     dor,
   };
+}
+
+/** Port the mock GitLab uses when testing a running server (configure wrangler dev with GITLAB_URL=http://127.0.0.1:4010). */
+export const REMOTE_MOCK_GITLAB_PORT = 4010;
+
+/** Starts a mock GitLab and a Sprintwell server configured to use it. */
+export async function startWithGitlab(): Promise<{ s: TestServer; gitlab: MockGitlab }> {
+  const remote = !!process.env.SPRINTWELL_TEST_URL;
+  const gitlab = await startMockGitlab(remote ? REMOTE_MOCK_GITLAB_PORT : 0);
+  const s = await startServer({ gitlab: { url: gitlab.url, clientId: gitlab.clientId, clientSecret: gitlab.clientSecret }, secret: 'test-secret-that-is-long-enough' });
+  const stop = s.stop;
+  s.stop = async () => {
+    await stop();
+    await gitlab.close();
+  };
+  return { s, gitlab };
+}
+
+/** Runs the whole "Sign in with GitLab" round trip as `user`, like a browser would. */
+export async function gitlabSignIn(s: TestServer, gitlab: MockGitlab, user: { id: number; username: string; name: string }, token: string | null, purpose: 'signin' | 'grant' = 'signin') {
+  gitlab.login(user);
+  const start = await s.api('POST', '/api/auth/gitlab/start', token, { purpose, returnTo: '/somewhere' });
+  if (start.status !== 200) throw new Error(start.text);
+  const r = await fetch(start.body.url as string, { redirect: 'manual' });
+  const back = new URL(r.headers.get('location') ?? '');
+  return s.api('POST', '/api/auth/gitlab/callback', token, { code: back.searchParams.get('code'), state: back.searchParams.get('state') });
 }

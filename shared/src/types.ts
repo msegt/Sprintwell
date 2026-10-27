@@ -12,6 +12,15 @@ export interface UserDTO {
   displayName: string;
   /** Email sign-in is planned; false for every v1 user. */
   hasEmail: boolean;
+  /** The verified GitLab account linked to this profile, if any. */
+  gitlab: GitlabIdentity | null;
+}
+
+export interface GitlabIdentity {
+  username: string;
+  name: string;
+  /** True once the person allowed Sprintwell to use the GitLab API on their behalf (needed for import and sync). */
+  canUseApi: boolean;
 }
 
 export type TeamRole = 'admin' | 'member';
@@ -21,6 +30,8 @@ export interface MemberDTO {
   displayName: string;
   role: TeamRole;
   joinedAt: string;
+  /** GitLab username, when the person signed in with GitLab (verified identity). */
+  gitlabUsername: string | null;
 }
 
 export interface TeamSettings {

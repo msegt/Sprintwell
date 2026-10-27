@@ -1,0 +1,10 @@
+/* Sign in with GitLab. */
+.hero-actions {
+  margin-top: 1.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.gitlab-btn {
+  white-space: nowrap;
+}

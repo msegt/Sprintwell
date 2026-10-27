@@ -31,3 +31,12 @@ export async function seriousViolations(page: Page) {
   return results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`);
 }
 
+
+/** The mock GitLab started by playwright.config.ts. */
+export const MOCK_GITLAB = process.env.E2E_MOCK_GITLAB ?? 'http://127.0.0.1:4010';
+
+/** Makes the mock GitLab treat the browser as signed in to GitLab as this person. */
+export async function gitlabAs(user: { id: number; username: string; name: string }): Promise<void> {
+  const r = await fetch(`${MOCK_GITLAB}/__mock/login`, { method: 'POST', body: JSON.stringify(user) });
+  if (!r.ok) throw new Error('mock GitLab login failed');
+}

@@ -1,6 +1,7 @@
 import { LIMITS } from '@sprintwell/shared';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
+import { GitlabButton } from '../components/GitlabButton';
 import { Button, Field, Icon } from '../components/ui';
 import { api, setToken } from '../lib/api';
 import { useAction, useMe, usePageTitle } from '../lib/hooks';
@@ -90,6 +91,9 @@ export function HomePage() {
               <li>No sign-up or email</li>
               <li>Accessible by design</li>
             </ul>
+            <div className="hero-actions">
+              <GitlabButton returnTo="/" variant="primary" />
+            </div>
           </section>
           <HeroArt />
         </div>

@@ -170,6 +170,9 @@ export const createMeetingBody = z.object({
   options: z.record(z.string(), z.unknown()).default({}),
 });
 
+export const gitlabStartBody = z.object({ purpose: z.enum(['signin', 'grant']).default('signin'), returnTo: z.string().max(300).default('/') });
+export const gitlabCallbackBody = z.object({ code: z.string().min(1).max(512), state: z.string().min(10).max(128) });
+
 export const deviceLinkRedeemBody = z.object({ code: z.string().trim().min(6).max(32) });
 
 // ---------------------------------------------------------------------------

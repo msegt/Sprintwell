@@ -79,6 +79,8 @@ export async function buildApp(config: Config, opts: { logger?: boolean } = {}):
           body: req.body,
           headers: req.headers as Record<string, string | undefined>,
           ip: req.ip,
+          query: Object.fromEntries(Object.entries((req.query ?? {}) as Record<string, unknown>).map(([k, v]) => [k, String(Array.isArray(v) ? v[0] : v)])),
+          origin: `${req.protocol}://${req.host}`,
         });
         if (result instanceof FileResponse) return reply.headers(result.headers).send(result.body);
         return result;

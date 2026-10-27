@@ -48,6 +48,7 @@ export function SettingsPage() {
                 <span>
                   {m.displayName}
                   {m.userId === me.id && <span className="muted"> (you)</span>}
+                  {m.gitlabUsername && <span className="muted small block">GitLab @{m.gitlabUsername}</span>}
                 </span>
                 {m.role === 'admin' && <Badge tone="info">Admin</Badge>}
               </span>

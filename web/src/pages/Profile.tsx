@@ -1,7 +1,9 @@
 import { LIMITS } from '@sprintwell/shared';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router';
-import { Button, ConfirmButton, CopyButton, Field } from '../components/ui';
+import { GitlabButton } from '../components/GitlabButton';
+import { Badge, Button, ConfirmButton, CopyButton, Field } from '../components/ui';
+import { usePublicConfig } from '../lib/config';
 import { api, download, setToken } from '../lib/api';
 import { useAction, useMe, usePageTitle } from '../lib/hooks';
 
@@ -11,6 +13,7 @@ export function ProfilePage() {
   const [link, setLink] = useState<{ code: string; expiresAt: string } | null>(null);
   const run = useAction();
   const navigate = useNavigate();
+  const config = usePublicConfig();
   usePageTitle('Your profile');
   useEffect(() => {
     if (user) setName(user.displayName);
@@ -34,6 +37,51 @@ export function ProfilePage() {
           Save
         </Button>
       </form>
+
+      {config?.gitlab.enabled && (
+        <section className="card stack" aria-labelledby="gitlab-h">
+          <h2 id="gitlab-h">GitLab</h2>
+          {user.gitlab ? (
+            <>
+              <p>
+                Signed in with GitLab as <strong>@{user.gitlab.username}</strong> <Badge tone="good">Verified</Badge>
+              </p>
+              <p className="small muted">Your teams see your GitLab username next to your name. You can sign in with GitLab on any device.</p>
+              {user.gitlab.canUseApi ? (
+                <p className="small">Sprintwell may use GitLab on your behalf, for example to import issues and write estimates back. It only does so when you or your team ask it to.</p>
+              ) : (
+                <>
+                  <p className="small">
+                    To import issues, merge requests and milestones, and to write estimates back to GitLab, allow Sprintwell to use GitLab on your behalf. GitLab will ask you to approve the <code>api</code> permission, which lets Sprintwell act as you on projects you can access.
+                  </p>
+                  <div>
+                    <GitlabButton purpose="grant" returnTo="/me">
+                      Allow access to GitLab
+                    </GitlabButton>
+                  </div>
+                </>
+              )}
+              <div>
+                <ConfirmButton
+                  confirmLabel="Disconnect GitLab"
+                  onConfirm={async () => {
+                    if (await run(() => api('DELETE', '/api/me/gitlab'), 'GitLab disconnected')) await refresh();
+                  }}
+                >
+                  Disconnect GitLab
+                </ConfirmButton>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="muted">Sign in with your GitLab account ({new URL(config.gitlab.url).host}) to prove who you are to your team and teachers, and to use Sprintwell on any device without codes.</p>
+              <div>
+                <GitlabButton returnTo="/me" variant="primary" />
+              </div>
+            </>
+          )}
+        </section>
+      )}
 
       <section className="card">
         <h2>Sign in on another device</h2>
