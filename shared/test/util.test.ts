@@ -7,7 +7,7 @@ const sprint = (over: Partial<SprintDTO> = {}): SprintDTO => ({
   goalMet: null, capacity: [], createdAt: '', closedAt: null, ...over,
 });
 const story = (over: Partial<StoryDTO> = {}): StoryDTO => ({
-  id: Math.random().toString(36).slice(2), sprintId: 's1', title: 't', asA: '', iWant: '', soThat: '', acceptanceCriteria: [], notes: '',
+  id: Math.random().toString(36).slice(2), sprintId: 's1', kind: 'story', title: 't', asA: '', iWant: '', soThat: '', acceptanceCriteria: [], notes: '',
   estimate: '3', status: 'todo', invest: {}, dor: {}, externalUrl: '', tasks: [], ownerId: null, position: 0,
   createdAt: '', updatedAt: '', doneAt: null, ...over,
 });

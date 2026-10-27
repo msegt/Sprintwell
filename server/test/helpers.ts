@@ -181,3 +181,17 @@ export class WsClient {
 }
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Story fields that satisfy the starter Definition of Ready, the story format and INVEST. */
+export async function readyFields(s: TestServer, teamId: string, token: string) {
+  const snap = await s.api('GET', `/api/teams/${teamId}`, token);
+  const dor = Object.fromEntries((snap.body.charter as { id: string; kind: string }[]).filter((c) => c.kind === 'dor').map((c) => [c.id, true]));
+  return {
+    asA: 'student',
+    iWant: 'to book a telescope slot',
+    soThat: 'I can observe at night',
+    acceptanceCriteria: ['Given a free slot, when I book it, then it is mine'],
+    invest: { I: true, N: true, V: true, E: true, S: true, T: true },
+    dor,
+  };
+}

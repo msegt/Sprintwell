@@ -54,7 +54,7 @@ export async function buildApp(config: Config, opts: { logger?: boolean } = {}):
   await app.register(websocket, { options: { maxPayload: 64 * 1024 } });
 
   app.setErrorHandler((err, req, reply) => {
-    if (err instanceof HttpError) return reply.status(err.status).send({ error: err.message });
+    if (err instanceof HttpError) return reply.status(err.status).send({ error: err.message, ...(err.details !== undefined && { details: err.details }) });
     const status = (err as { statusCode?: number }).statusCode;
     if (status && status >= 400 && status < 500) return reply.status(status).send({ error: (err as Error).message });
     req.log.error({ err }, 'request failed');

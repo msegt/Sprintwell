@@ -27,6 +27,7 @@ export const teamSettingsBody = z.object({
   sprintLengthDays: z.number().int().min(1).max(60).optional(),
   retroVotesPerPerson: z.number().int().min(1).max(20).optional(),
   trackerUrl: url.optional(),
+  enforceReady: z.boolean().optional(),
 });
 
 export const createTeamBody = z.object({
@@ -59,6 +60,7 @@ const taskSchema = z.object({
 const investKeys = INVEST.map((i) => i.key) as [string, ...string[]];
 
 const storyFields = {
+  kind: z.enum(['story', 'bug', 'spike', 'task']),
   title: required(LIMITS.title),
   asA: text(LIMITS.shortText),
   iWant: text(LIMITS.shortText),
@@ -77,6 +79,7 @@ const storyFields = {
 
 export const storyBody = z.object({
   ...storyFields,
+  kind: storyFields.kind.default('story'),
   asA: storyFields.asA.default(''),
   iWant: storyFields.iWant.default(''),
   soThat: storyFields.soThat.default(''),

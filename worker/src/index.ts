@@ -87,7 +87,7 @@ function buildApi(env: Env): Hono<AppEnv> {
   registerApi(router, { repo, realtime, meetings, config });
 
   app.onError((err, c) => {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 400);
+    if (err instanceof HttpError) return c.json({ error: err.message, ...(err.details !== undefined && { details: err.details }) }, err.status as 400);
     log.error({ err: String(err), stack: (err as Error).stack }, 'request failed');
     return c.json({ error: 'Something went wrong on our side. Please try again.' }, 500);
   });

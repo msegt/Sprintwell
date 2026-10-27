@@ -35,6 +35,7 @@ export const PAGE_GUIDES: Record<PageGuideId, Guide> = {
       'Add acceptance criteria: testable conditions such as “Given…, when…, then…”.',
       'Tick the INVEST checks honestly. If a story is not Small or Testable yet, refine or split it.',
       'Tick the Definition of Ready items. A story is Ready when all of them are ticked.',
+      'Only Ready items can go into a sprint. User stories also need “As a… I want… so that…”, at least one acceptance criterion and all six INVEST checks; bugs, spikes and technical tasks need only the Definition of Ready.',
       'Put the most valuable stories at the top with the up and down arrows.',
       'Select stories with the tick boxes, then choose Estimate with Planning Poker.',
     ],
@@ -164,7 +165,7 @@ export const MEETING_GUIDES: Record<MeetingKind, Guide> = {
       'How: break each story into tasks of a day or less.',
       'Confirm: check the plan and start the sprint.',
     ],
-    tips: ['Don’t over-commit. Finishing fewer stories well beats leaving many half done.', 'Only take stories that meet your Definition of Ready.'],
+    tips: ['Don’t over-commit. Finishing fewer stories well beats leaving many half done.', 'Only Ready items can be added to the sprint. If one is not Ready, Sprintwell lists what is missing and you can fix it there and then: refining the Product Backlog during planning is fine.'],
   },
   review: {
     title: 'How to run the Sprint Review',

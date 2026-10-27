@@ -23,6 +23,8 @@ export class HttpError extends Error {
   constructor(
     public readonly status: number,
     message: string,
+    /** Optional structured detail for the client, e.g. what makes a story not ready. */
+    public readonly details?: unknown,
   ) {
     super(message);
   }

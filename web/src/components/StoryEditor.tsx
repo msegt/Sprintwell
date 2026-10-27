@@ -1,4 +1,5 @@
-import { INVEST, LIMITS, dorItems, getDeck, shouldSplit, storySentence, type StoryDTO, type TaskDTO } from '@sprintwell/shared';
+import { INVEST, ITEM_KINDS, LIMITS, dorItems, getDeck, readinessProblems, shouldSplit, storySentence, type StoryDTO, type TaskDTO } from '@sprintwell/shared';
+import '../styles/ready.css';
 import { useState, type FormEvent } from 'react';
 import { api } from '../lib/api';
 import { useAction, useTeam } from '../lib/hooks';
@@ -8,6 +9,7 @@ type Draft = Omit<StoryDTO, 'id' | 'position' | 'createdAt' | 'updatedAt' | 'don
 
 const blank = (sprintId: string | null = null): Draft => ({
   sprintId,
+  kind: 'story',
   title: '',
   asA: '',
   iWant: '',
@@ -36,6 +38,11 @@ export function StoryEditor({ story, onClose, defaultSprintId }: { story: StoryD
   const deck = getDeck(snap.team.settings.defaultDeck).cards.filter((c) => c !== '☕');
   const dor = dorItems(snap.charter);
   const sentence = storySentence(d);
+  const enforce = snap.team.settings.enforceReady;
+  const problems = readinessProblems({ ...d, acceptanceCriteria: newAc.trim() ? [...d.acceptanceCriteria, newAc.trim()] : d.acceptanceCriteria }, snap.charter);
+  const movingIntoSprint = !!d.sprintId && d.sprintId !== (story?.sprintId ?? null);
+  const blocked = enforce && movingIntoSprint && problems.length > 0;
+  const isStory = d.kind === 'story';
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
@@ -60,8 +67,19 @@ export function StoryEditor({ story, onClose, defaultSprintId }: { story: StoryD
           <Field label="Short name" hint="A few words, as you would use for the issue title.">
             {(id, h) => <input id={id} aria-describedby={h} className="input" required maxLength={LIMITS.title} value={d.title} onChange={(e) => set('title', e.target.value)} />}
           </Field>
+          <Field label="Type" hint="Bugs, spikes and technical tasks do not need the user story format or INVEST, but must still meet your Definition of Ready.">
+            {(id, h) => (
+              <select id={id} aria-describedby={h} className="input" value={d.kind} onChange={(e) => set('kind', e.target.value as Draft['kind'])}>
+                {ITEM_KINDS.map((k) => (
+                  <option key={k.id} value={k.id}>
+                    {k.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
           <fieldset className="story-sentence">
-            <legend>User story</legend>
+            <legend>User story{!isStory && <span className="hint"> (optional for this type)</span>}</legend>
             <div className="sentence-grid">
               <label>
                 As a
@@ -184,6 +202,27 @@ export function StoryEditor({ story, onClose, defaultSprintId }: { story: StoryD
         </div>
 
         <aside className="story-side stack">
+          {enforce && (
+            <div className={`ready-panel ${problems.length ? 'not-ready' : 'is-ready'}`} role="status">
+              {problems.length === 0 ? (
+                <p>
+                  <Icon name="check" size={16} /> <strong>Ready for a sprint.</strong>
+                </p>
+              ) : (
+                <>
+                  <p>
+                    <strong>{blocked ? 'Cannot go into the sprint yet.' : 'Not ready for a sprint yet.'}</strong>{' '}
+                    {blocked ? 'Fix these first, or keep it in the Product Backlog:' : 'It can stay in the Product Backlog while you refine it.'}
+                  </p>
+                  <ul className="small">
+                    {problems.map((p) => (
+                      <li key={p.code}>{p.message}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+          )}
           <div className="row wrap">
             <Field label="Estimate">
               {(id) => (
@@ -245,7 +284,7 @@ export function StoryEditor({ story, onClose, defaultSprintId }: { story: StoryD
 
           <fieldset className="checklist">
             <legend>
-              INVEST check <Badge tone={INVEST.every((i) => d.invest[i.key]) ? 'good' : 'neutral'}>{INVEST.filter((i) => d.invest[i.key]).length}/6</Badge>
+              INVEST check{!isStory && <span className="hint"> (user stories only)</span>} <Badge tone={INVEST.every((i) => d.invest[i.key]) ? 'good' : 'neutral'}>{INVEST.filter((i) => d.invest[i.key]).length}/6</Badge>
             </legend>
             {INVEST.map((i) => (
               <label key={i.key} className="check">
@@ -289,9 +328,10 @@ export function StoryEditor({ story, onClose, defaultSprintId }: { story: StoryD
           ) : (
             <span />
           )}
-          <div className="row">
+          <div className="row wrap end">
+            {blocked && <span className="small warn-text">Not ready for the sprint. Set Sprint to “Product Backlog” to save it there.</span>}
             <Button onClick={onClose}>Cancel</Button>
-            <Button type="submit" variant="primary" busy={busy}>
+            <Button type="submit" variant="primary" busy={busy} disabled={blocked} title={blocked ? 'Not ready for the sprint: see the list at the top right' : undefined}>
               {story ? 'Save' : 'Add story'}
             </Button>
           </div>
