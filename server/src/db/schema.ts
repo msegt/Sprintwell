@@ -69,6 +69,7 @@ export interface StoriesTable {
   id: string;
   team_id: string;
   sprint_id: string | null;
+  kind: string;
   title: string;
   as_a: string;
   i_want: string;

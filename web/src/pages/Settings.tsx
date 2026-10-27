@@ -149,6 +149,13 @@ function TeamSettingsForm() {
       <Field label="Issue tracker project (optional)" hint="Your GitLab or GitHub project address. Used to prefill imports.">
         {(id, h) => <input id={id} aria-describedby={h} type="url" className="input" maxLength={500} value={s.trackerUrl} onChange={(e) => setS({ ...s, trackerUrl: e.target.value })} placeholder="https://git.example.ac.uk/group/project" />}
       </Field>
+      <label className="check">
+        <input type="checkbox" checked={s.enforceReady} onChange={(e) => setS({ ...s, enforceReady: e.target.checked })} />
+        <span>
+          <strong>Only Ready items can enter a sprint</strong>
+          <span className="hint block">Items must meet your Definition of Ready; user stories also need the “As a… I want… so that…” format, acceptance criteria and all six INVEST checks. Recommended.</span>
+        </span>
+      </label>
       <div>
         <Button type="submit" variant="primary">
           Save settings

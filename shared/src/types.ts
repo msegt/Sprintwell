@@ -1,4 +1,5 @@
 import type { EsvpId, InvestKey, MeetingKind, RiskCategory } from './constants';
+import type { ItemKind } from './ready';
 import type { PokerStats } from './poker';
 import type { RetroColumn } from './templates';
 
@@ -30,6 +31,8 @@ export interface TeamSettings {
   retroVotesPerPerson: number;
   /** Optional link to the team's issue tracker board (e.g. a GitLab project). */
   trackerUrl: string;
+  /** Only items that meet the Definition of Ready (and, for user stories, INVEST and the story format) can enter a sprint. */
+  enforceReady: boolean;
 }
 
 export const DEFAULT_TEAM_SETTINGS: TeamSettings = {
@@ -38,6 +41,7 @@ export const DEFAULT_TEAM_SETTINGS: TeamSettings = {
   sprintLengthDays: 14,
   retroVotesPerPerson: 3,
   trackerUrl: '',
+  enforceReady: true,
 };
 
 export interface TeamSummaryDTO {
@@ -104,6 +108,8 @@ export interface TaskDTO {
 export interface StoryDTO {
   id: string;
   sprintId: string | null;
+  /** User story, bug, spike or technical task. Only user stories need the story format and INVEST. */
+  kind: ItemKind;
   title: string;
   asA: string;
   iWant: string;

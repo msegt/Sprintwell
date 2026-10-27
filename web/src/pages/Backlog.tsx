@@ -1,8 +1,9 @@
-import { INVEST, LIMITS, investScore, isReady, points, shouldSplit, storySentence, type StoryDTO } from '@sprintwell/shared';
+import { INVEST, ITEM_KINDS, LIMITS, investScore, isReady, points, shouldSplit, storySentence, type StoryDTO } from '@sprintwell/shared';
 import { useMemo, useState, type FormEvent } from 'react';
 import { HowTo } from '../components/Guide';
 import { NewMeetingDialog } from '../components/NewMeeting';
 import { PAGE_GUIDES } from '../content/guides';
+import { useReadyGate } from '../components/ReadyGate';
 import { StoryEditor } from '../components/StoryEditor';
 import { Badge, Button, Empty, Field, Icon, Modal } from '../components/ui';
 import { api, download } from '../lib/api';
@@ -19,6 +20,7 @@ export function BacklogPage() {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [gitlabOpen, setGitlabOpen] = useState(false);
   const [pokerOpen, setPokerOpen] = useState(false);
+  const gate = useReadyGate();
   usePageTitle('Product Backlog');
 
   const target = snap.sprints.find((s) => s.status === 'planned') ?? snap.sprints.find((s) => s.status === 'active');
@@ -82,7 +84,7 @@ export function BacklogPage() {
               <Button
                 small
                 onClick={async () => {
-                  for (const id of selected) await api('PATCH', `/api/teams/${teamId}/stories/${id}`, { sprintId: target.id, status: 'todo' }).catch(() => undefined);
+                  await gate.addToSprint(snap.stories.filter((s) => selected.includes(s.id) && s.sprintId !== target.id), target);
                   setSelected([]);
                 }}
               >
@@ -104,6 +106,7 @@ export function BacklogPage() {
         <ol className="story-list">
           {stories.map((s) => {
             const ready = isReady(s, snap.charter);
+            const toFix = gate.problems(s);
             const inBacklog = backlogOrder.includes(s);
             return (
               <li key={s.id} className="story-row">
@@ -115,7 +118,13 @@ export function BacklogPage() {
                   {storySentence(s) && <p className="small muted">{storySentence(s)}</p>}
                   <div className="row wrap small">
                     {s.estimate ? <Badge tone={shouldSplit(s.estimate, snap.team.settings.splitThreshold) ? 'warn' : 'info'}>{s.estimate} pts</Badge> : <Badge>Not estimated</Badge>}
-                    {ready ? <Badge tone="good">Ready</Badge> : null}
+                    {s.kind !== 'story' && <Badge>{ITEM_KINDS.find((k) => k.id === s.kind)?.name}</Badge>}
+                    {ready && toFix.length === 0 ? <Badge tone="good">Ready for a sprint</Badge> : null}
+                    {!s.sprintId && s.status !== 'done' && toFix.length > 0 && (
+                      <span className="muted" title={toFix.map((p) => p.message).join('\n')}>
+                        {toFix.length} thing{toFix.length === 1 ? '' : 's'} to fix before a sprint
+                      </span>
+                    )}
                     <span className="muted" title={INVEST.map((i) => `${i.name}: ${s.invest[i.key] ? 'yes' : 'not yet'}`).join('\n')}>
                       INVEST {investScore(s)}/6
                     </span>
@@ -148,6 +157,7 @@ export function BacklogPage() {
       )}
 
       {editing && <StoryEditor story={editing === 'new' ? null : (snap.stories.find((s) => s.id === editing.id) ?? editing)} onClose={() => setEditing(null)} />}
+      {gate.dialog}
       <BulkAdd open={bulkOpen} onClose={() => setBulkOpen(false)} />
       <GitLabImport open={gitlabOpen} onClose={() => setGitlabOpen(false)} />
       <NewMeetingDialog kind="poker" open={pokerOpen} onClose={() => setPokerOpen(false)} presetStoryIds={selected} />

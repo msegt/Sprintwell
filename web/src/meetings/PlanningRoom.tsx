@@ -1,6 +1,7 @@
 import { LIMITS, averageVelocity, capacityHours, dorItems, investScore, isReady, points, type CapacityRow, type PlanningView, type StoryDTO } from '@sprintwell/shared';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { useReadyGate } from '../components/ReadyGate';
 import { StoryEditor } from '../components/StoryEditor';
 import { Badge, Button, Empty, Field, Icon } from '../components/ui';
 import { api } from '../lib/api';
@@ -90,7 +91,8 @@ function What() {
   const run = useAction();
   const { sprint, stories } = useSprint();
   const data = view.data as PlanningView;
-  const [editing, setEditing] = useState<StoryDTO | null>(null);
+  const [editing, setEditing] = useState<StoryDTO | 'new' | null>(null);
+  const gate = useReadyGate();
   const rows: CapacityRow[] = snap.team.members.map(
     (m) => data.capacity.find((r) => r.userId === m.userId) ?? { userId: m.userId, daysAvailable: Math.round((snap.team.settings.sprintLengthDays * 5) / 7), hoursPerDay: 6, focusPercent: 100 },
   );
@@ -101,7 +103,7 @@ function What() {
   const hasDor = dorItems(snap.charter).length > 0;
   const firstSprint = velocity === null;
   const setRow = (r: CapacityRow) => send({ type: 'setCapacity', row: r });
-  const add = (s: StoryDTO) => run(() => api('PATCH', `/api/teams/${teamId}/stories/${s.id}`, { sprintId: sprint.id, status: 'todo' }));
+  const add = (s: StoryDTO) => gate.addToSprint([s], sprint);
   const remove = (s: StoryDTO) => run(() => api('PATCH', `/api/teams/${teamId}/stories/${s.id}`, { sprintId: null, status: 'backlog' }));
 
   return (
@@ -195,10 +197,18 @@ function What() {
         <section className="card" aria-labelledby="pb-h">
           <div className="row between wrap">
             <h2 id="pb-h">Product Backlog</h2>
-            <Link to={`/t/${teamId}/backlog`} className="small">
-              Open backlog
-            </Link>
+            <span className="row">
+              {!ended && (
+                <Button small onClick={() => setEditing('new')}>
+                  <Icon name="plus" size={14} /> New item
+                </Button>
+              )}
+              <Link to={`/t/${teamId}/backlog`} className="small">
+                Open backlog
+              </Link>
+            </span>
           </div>
+          <p className="small muted">Refine items here until they meet your Definition of Ready, then add them to the sprint.</p>
           {backlog.length === 0 ? (
             <p className="muted">The Product Backlog is empty.</p>
           ) : (
@@ -212,6 +222,7 @@ function What() {
                     <span className="small muted block">
                       {s.estimate ? `${s.estimate} pts` : 'not estimated'} · INVEST {investScore(s)}/6
                       {hasDor && (isReady(s, snap.charter) ? ' · Ready' : ' · not Ready')}
+                      {gate.problems(s).length > 0 && ` · ${gate.problems(s).length} thing${gate.problems(s).length === 1 ? '' : 's'} to fix before the sprint`}
                     </span>
                   </span>
                   {!ended && (
@@ -225,7 +236,8 @@ function What() {
           )}
         </section>
       </div>
-      {editing && <StoryEditor story={snap.stories.find((s) => s.id === editing.id) ?? editing} onClose={() => setEditing(null)} />}
+      {editing && <StoryEditor story={editing === 'new' ? null : (snap.stories.find((s) => s.id === editing.id) ?? editing)} onClose={() => setEditing(null)} />}
+      {gate.dialog}
     </div>
   );
 }

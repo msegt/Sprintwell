@@ -1,0 +1,44 @@
+/* Definition of Ready gate. */
+.ready-panel {
+  padding: 0.7rem 0.85rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+.ready-panel p {
+  margin: 0;
+}
+.ready-panel ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+}
+.ready-panel.is-ready {
+  background: var(--good-soft);
+  color: var(--good);
+}
+.ready-panel.not-ready {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.not-ready-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.not-ready-list > li {
+  padding: 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.not-ready-list ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+}
+.warn-text {
+  color: var(--warn);
+}
+.row.end {
+  justify-content: flex-end;
+}

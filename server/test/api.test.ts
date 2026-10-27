@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { person, startServer, team, type TestServer } from './helpers';
+import { person, readyFields, startServer, team, type TestServer } from './helpers';
 
 let s: TestServer;
 beforeAll(async () => {
@@ -125,8 +125,9 @@ describe('backlog, sprints and the rest of the team data', () => {
     const clash = await s.api('PATCH', `/api/teams/${teamId}/sprints/${s2.id}`, admin.token, { status: 'active' });
     expect(clash.status).toBe(400);
     expect(clash.body.error).toMatch(/still active/);
-    await s.api('POST', `/api/teams/${teamId}/stories`, admin.token, { title: 'Done one', sprintId: s1.id, status: 'done', estimate: '5' });
-    await s.api('POST', `/api/teams/${teamId}/stories`, admin.token, { title: 'Unfinished', sprintId: s1.id, status: 'doing' });
+    const ready = await readyFields(s, teamId, admin.token);
+    await s.api('POST', `/api/teams/${teamId}/stories`, admin.token, { ...ready, title: 'Done one', sprintId: s1.id, status: 'done', estimate: '5' });
+    await s.api('POST', `/api/teams/${teamId}/stories`, admin.token, { ...ready, title: 'Unfinished', sprintId: s1.id, status: 'doing' });
     const closed = await s.api('POST', `/api/teams/${teamId}/sprints/${s1.id}/close`, admin.token);
     expect(closed.body.returned).toBe(1);
     const snap = await s.api('GET', `/api/teams/${teamId}`, admin.token);
@@ -180,6 +181,34 @@ describe('backlog, sprints and the rest of the team data', () => {
     expect((await s.api('DELETE', `/api/teams/${teamId}`, members[0]!.token)).status).toBe(403);
     expect((await s.api('DELETE', `/api/teams/${teamId}`, admin.token)).status).toBe(200);
     expect((await s.api('GET', `/api/teams/${teamId}`, admin.token)).status).toBe(404);
+  });
+});
+
+describe('Definition of Ready gate', () => {
+  it('keeps items that are not ready out of a sprint, and says why', async () => {
+    const { teamId, admin } = await team(s, 'Ada');
+    const sprint = (await s.api('POST', `/api/teams/${teamId}/sprints`, admin.token, { name: 'Sprint 1' })).body;
+    const draft = (await s.api('POST', `/api/teams/${teamId}/stories`, admin.token, { title: 'Book a slot' })).body;
+    const refused = await s.api('PATCH', `/api/teams/${teamId}/stories/${draft.id}`, admin.token, { sprintId: sprint.id, status: 'todo' });
+    expect(refused.status).toBe(422);
+    expect(refused.body.details.code).toBe('not_ready');
+    expect(refused.body.details.items[0].problems.map((p: { code: string }) => p.code)).toEqual(['format', 'acceptance', 'invest', 'dor']);
+    expect((await s.api('POST', `/api/teams/${teamId}/stories`, admin.token, { title: 'Straight in', sprintId: sprint.id })).status).toBe(422);
+
+    const ready = await readyFields(s, teamId, admin.token);
+    // Refining in the backlog is always allowed; it can then enter the sprint.
+    expect((await s.api('PATCH', `/api/teams/${teamId}/stories/${draft.id}`, admin.token, ready)).status).toBe(200);
+    expect((await s.api('PATCH', `/api/teams/${teamId}/stories/${draft.id}`, admin.token, { sprintId: sprint.id, status: 'todo' })).status).toBe(200);
+  });
+
+  it('asks bugs only for the Definition of Ready, and can be switched off', async () => {
+    const { teamId, admin } = await team(s, 'Ada');
+    const sprint = (await s.api('POST', `/api/teams/${teamId}/sprints`, admin.token, { name: 'Sprint 1' })).body;
+    const { dor } = await readyFields(s, teamId, admin.token);
+    expect((await s.api('POST', `/api/teams/${teamId}/stories`, admin.token, { kind: 'bug', title: 'Crash on login', dor, sprintId: sprint.id })).status).toBe(200);
+    expect((await s.api('POST', `/api/teams/${teamId}/stories`, admin.token, { kind: 'bug', title: 'Typo', sprintId: sprint.id })).status).toBe(422);
+    await s.api('PATCH', `/api/teams/${teamId}`, admin.token, { settings: { enforceReady: false } });
+    expect((await s.api('POST', `/api/teams/${teamId}/stories`, admin.token, { kind: 'bug', title: 'Typo', sprintId: sprint.id })).status).toBe(200);
   });
 });
 

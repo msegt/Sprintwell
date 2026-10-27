@@ -142,4 +142,13 @@ export const migrations: Record<string, Migration> = {
       await db.schema.createIndex('sessions_user_idx').on('sessions').column('user_id').execute();
     },
   },
+
+  '002_story_kind': {
+    async up(db: Kysely<any>) {
+      await db.schema
+        .alterTable('stories')
+        .addColumn('kind', 'text', (c) => c.notNull().defaultTo('story'))
+        .execute();
+    },
+  },
 };

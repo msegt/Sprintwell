@@ -8,6 +8,7 @@ import {
   type CapacityRow,
   type CharterItemDTO,
   type CharterKind,
+  readinessProblems,
   type MeetingKind,
   type MeetingSummaryDTO,
   type MemberDTO,
@@ -33,7 +34,7 @@ import type {
   StoriesTable,
   UsersTable,
 } from './db/schema';
-import { badRequest, forbidden, hashToken, newDeviceCode, newId, newInviteCode, newToken, notFound, now, parseJson } from './util';
+import { HttpError, badRequest, forbidden, hashToken, newDeviceCode, newId, newInviteCode, newToken, notFound, now, parseJson } from './util';
 
 export const FORMER_MEMBER = 'Former member';
 
@@ -64,6 +65,7 @@ export function toStory(r: Selectable<StoriesTable>): StoryDTO {
   return {
     id: r.id,
     sprintId: r.sprint_id,
+    kind: (r.kind || 'story') as StoryDTO['kind'],
     title: r.title,
     asA: r.as_a,
     iWant: r.i_want,
@@ -560,6 +562,26 @@ export class Repo {
 
   // ---------------------------------------------------------------- stories
 
+  /**
+   * Refuses items that do not meet the team's Definition of Ready (and, for user
+   * stories, the story format and INVEST) when they would enter a sprint.
+   */
+  private async assertReady(teamId: string, items: Pick<StoryDTO, 'title' | 'kind' | 'asA' | 'iWant' | 'soThat' | 'acceptanceCriteria' | 'invest' | 'dor'>[]): Promise<void> {
+    if (items.length === 0) return;
+    const team = await this.db.selectFrom('teams').select('settings').where('id', '=', teamId).executeTakeFirst();
+    const settings = { ...DEFAULT_TEAM_SETTINGS, ...parseJson<Partial<TeamSettings>>(team?.settings, {}) };
+    if (!settings.enforceReady) return;
+    const charter = (await this.db.selectFrom('charter_items').selectAll().where('team_id', '=', teamId).where('kind', '=', 'dor').execute()).map(toCharter);
+    const notReady = items.map((s) => ({ title: s.title, problems: readinessProblems(s, charter) })).filter((x) => x.problems.length > 0);
+    if (notReady.length === 0) return;
+    const first = notReady[0]!;
+    throw new HttpError(
+      422,
+      notReady.length === 1 ? `“${first.title}” is not ready for a sprint. ${first.problems[0]!.message}` : `${notReady.length} items are not ready for a sprint.`,
+      { code: 'not_ready', items: notReady },
+    );
+  }
+
   async story(teamId: string, id: string): Promise<StoryDTO> {
     const row = await this.db.selectFrom('stories').selectAll().where('team_id', '=', teamId).where('id', '=', id).executeTakeFirst();
     if (!row) throw notFound('Story not found');
@@ -578,6 +600,7 @@ export class Repo {
   async createStories(teamId: string, inputs: Omit<StoryDTO, 'id' | 'position' | 'createdAt' | 'updatedAt' | 'doneAt'>[]): Promise<StoryDTO[]> {
     await this.assertRoom('stories', teamId, inputs.length, LIMITS.storiesPerTeam, 'stories');
     await this.assertMembers(teamId, inputs.flatMap((s) => [s.ownerId, ...s.tasks.map((t) => t.ownerId)]));
+    await this.assertReady(teamId, inputs.filter((s) => s.sprintId));
     const max = await this.db.selectFrom('stories').select((e) => e.fn.max<number>('position').as('p')).where('team_id', '=', teamId).executeTakeFirst();
     let position = Number(max?.p ?? -1) + 1;
     const ts = now();
@@ -588,6 +611,7 @@ export class Repo {
         id: newId(),
         team_id: teamId,
         sprint_id: s.sprintId,
+        kind: s.kind,
         title: s.title,
         as_a: s.asA,
         i_want: s.iWant,
@@ -614,6 +638,7 @@ export class Repo {
   async updateStory(teamId: string, id: string, patch: Partial<Omit<StoryDTO, 'id' | 'createdAt' | 'updatedAt' | 'doneAt' | 'position'>>): Promise<StoryDTO> {
     const current = await this.story(teamId, id);
     if (patch.sprintId) await this.sprint(teamId, patch.sprintId);
+    if (patch.sprintId && patch.sprintId !== current.sprintId) await this.assertReady(teamId, [{ ...current, ...patch }]);
     await this.assertMembers(teamId, [patch.ownerId, ...(patch.tasks ?? []).map((t) => t.ownerId)]);
     const status = patch.status ?? current.status;
     let doneAt = current.doneAt;
@@ -622,6 +647,7 @@ export class Repo {
     await this.db
       .updateTable('stories')
       .set({
+        ...(patch.kind !== undefined && { kind: patch.kind }),
         ...(patch.title !== undefined && { title: patch.title }),
         ...(patch.asA !== undefined && { as_a: patch.asA }),
         ...(patch.iWant !== undefined && { i_want: patch.iWant }),
