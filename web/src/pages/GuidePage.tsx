@@ -1,7 +1,7 @@
 import { KERTH_ATTRIBUTION, KERTH_PRIME_DIRECTIVE, MEETING_INFO, PHASES, type MeetingKind } from '@sprintwell/shared';
-import { GuideBody } from '../components/Guide';
+import { GuideBody, Links } from '../components/Guide';
 import { KIND_ORDER } from '../components/NewMeeting';
-import { MEETING_GUIDES, PAGE_GUIDES, PHASE_HINTS, type PageGuideId } from '../content/guides';
+import { LINKS, MEETING_GUIDES, PAGE_GUIDES, PHASE_HINTS, type PageGuideId } from '../content/guides';
 import { usePageTitle } from '../lib/hooks';
 
 const PAGE_ORDER: PageGuideId[] = ['overview', 'backlog', 'sprint', 'events', 'charter', 'actions', 'risks', 'team'];
@@ -23,6 +23,9 @@ export function GuidePage() {
             </li>
           ))}
         </ul>
+        <p className="guide-tips-title">
+          <a href="#reading">Where to read more</a>
+        </p>
         <p className="guide-tips-title">Team pages</p>
         <ul>
           {PAGE_ORDER.map((p) => (
@@ -42,9 +45,16 @@ export function GuidePage() {
       {PAGE_ORDER.map((p) => (
         <section key={p} id={`page-${p}`} className="guide-section" aria-labelledby={`page-${p}-h`}>
           <h3 id={`page-${p}-h`}>{PAGE_GUIDES[p].title}</h3>
-          <GuideBody guide={PAGE_GUIDES[p]} />
+          <GuideBody guide={PAGE_GUIDES[p]} full />
         </section>
       ))}
+
+      <h2 id="reading">Where to read more</h2>
+      <p>Sprintwell’s guidance is deliberately short. These sources go deeper. They are other organisations’ websites, checked in October 2026, so they may change.</p>
+      <Links title="Scrum itself" links={[LINKS.scrumGuide, LINKS.scrumGuideEs, LINKS.scrumEvents, LINKS.scrumGlossary]} />
+      <Links title="Backlogs and estimation" links={[LINKS.invest, LINKS.splitting, LINKS.definitionOfReady, LINKS.planningPoker]} />
+      <Links title="Retrospectives and facilitation" links={[LINKS.retromat, LINKS.primeDirective, LINKS.oneTwoFourAll]} />
+      <Links title="Pair and mob programming" links={[LINKS.pairing, LINKS.mobbing]} />
 
       <h2>The Retrospective Prime Directive</h2>
       <blockquote className="prime-directive">
@@ -62,7 +72,7 @@ function EventGuide({ kind }: { kind: MeetingKind }) {
     <section id={`event-${kind}`} className="guide-section" aria-labelledby={`event-${kind}-h`}>
       <h3 id={`event-${kind}-h`}>{guide.title}</h3>
       <p className="small muted">Timebox: {MEETING_INFO[kind].timebox}</p>
-      <GuideBody guide={guide} />
+      <GuideBody guide={guide} full />
       {phases.length > 1 && (
         <div className="table-scroll">
           <table className="table">

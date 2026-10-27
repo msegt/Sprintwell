@@ -1,7 +1,8 @@
 import type { MeetingKind, TeamSnapshot } from '@sprintwell/shared';
+import '../styles/guide-more.css';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { PHASE_HINTS, type Guide } from '../content/guides';
+import { PHASE_HINTS, type Guide, type GuideLink } from '../content/guides';
 import { Button, Icon } from './ui';
 
 const KEY = 'sprintwell.guide.';
@@ -23,25 +24,75 @@ function writePref(id: string, value: string): void {
 }
 
 /** The steps and tips of a guide, without the surrounding panel. */
-export function GuideBody({ guide }: { guide: Guide }) {
+export function GuideBody({ guide, full }: { guide: Guide; full?: boolean }) {
+  const hasMore = !!(guide.prepare?.length || guide.pitfalls?.length || guide.links?.length);
+  const more = <GuideMore guide={guide} />;
   return (
     <>
       <p className="guide-purpose">{guide.purpose}</p>
+      {full && guide.prepare && <List title="Before you start" items={guide.prepare} />}
+      <p className="guide-tips-title">{full && guide.prepare ? 'During the event' : 'Steps'}</p>
       <ol className="guide-steps">
         {guide.steps.map((s) => (
           <li key={s}>{s}</li>
         ))}
       </ol>
-      {guide.tips && guide.tips.length > 0 && (
+      {guide.tips && guide.tips.length > 0 && <List title="Tips" items={guide.tips} />}
+      {full ? (
         <>
-          <p className="guide-tips-title">Tips</p>
-          <ul className="guide-tips">
-            {guide.tips.map((t) => (
-              <li key={t}>{t}</li>
-            ))}
-          </ul>
+          {guide.pitfalls && <List title="Watch out for" items={guide.pitfalls} />}
+          {guide.links && <Links links={guide.links} />}
         </>
+      ) : (
+        hasMore && (
+          <details className="guide-more">
+            <summary>Preparation, common pitfalls and further reading</summary>
+            {more}
+          </details>
+        )
       )}
+    </>
+  );
+}
+
+function GuideMore({ guide }: { guide: Guide }) {
+  return (
+    <>
+      {guide.prepare && <List title="Before you start" items={guide.prepare} />}
+      {guide.pitfalls && <List title="Watch out for" items={guide.pitfalls} />}
+      {guide.links && <Links links={guide.links} />}
+    </>
+  );
+}
+
+function List({ title, items }: { title: string; items: string[] }) {
+  return (
+    <>
+      <p className="guide-tips-title">{title}</p>
+      <ul className="guide-tips">
+        {items.map((t) => (
+          <li key={t}>{t}</li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+export function Links({ links, title = 'Further reading' }: { links: GuideLink[]; title?: string }) {
+  return (
+    <>
+      <p className="guide-tips-title">{title}</p>
+      <ul className="guide-links">
+        {links.map((l) => (
+          <li key={l.url}>
+            <a href={l.url} target="_blank" rel="noopener noreferrer">
+              {l.title}
+              <span className="sr-only"> (opens in a new tab)</span> <Icon name="external" size={12} />
+            </a>{' '}
+            <span className="muted small">{l.source}</span>
+          </li>
+        ))}
+      </ul>
     </>
   );
 }

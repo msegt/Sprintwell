@@ -4,13 +4,54 @@ import type { MeetingKind } from '@sprintwell/shared';
  * Short, practical guidance shown inside the app. Keep each step to one
  * sentence: people read this while the event is running.
  */
+export interface GuideLink {
+  title: string;
+  url: string;
+  /** Who publishes it, shown next to the link. */
+  source: string;
+}
+
 export interface Guide {
   title: string;
   /** One sentence on what this is for. */
   purpose: string;
   steps: string[];
   tips?: string[];
+  /** What to do before the event starts. */
+  prepare?: string[];
+  /** Common ways it goes wrong. */
+  pitfalls?: string[];
+  /** Further reading on other websites. */
+  links?: GuideLink[];
 }
+
+/**
+ * External reading, checked in October 2026. These are other people's
+ * websites: they may move or change.
+ */
+export const LINKS = {
+  scrumGuide: { title: 'The 2020 Scrum Guide (PDF)', url: 'https://scrumguides.org/docs/scrumguide/v2020/2020-Scrum-Guide-US.pdf', source: 'Schwaber and Sutherland' },
+  scrumGuideEs: { title: 'La Guía de Scrum 2020, español de España (PDF)', url: 'https://www.scrumguides.org/docs/scrumguide/v2020/2020-Scrum-Guide-Spanish-European.pdf', source: 'Schwaber and Sutherland' },
+  scrumEvents: { title: 'Introduction to the Scrum events', url: 'https://www.scrum.org/resources/introduction-scrum-events', source: 'Scrum.org' },
+  scrumGlossary: { title: 'Scrum glossary', url: 'https://www.scrum.org/resources/scrum-glossary', source: 'Scrum.org' },
+  sprintPlanning: { title: 'Introduction to Sprint Planning', url: 'https://www.scrum.org/resources/introduction-sprint-planning', source: 'Scrum.org' },
+  dailyScrum: { title: 'Introduction to the Daily Scrum', url: 'https://www.scrum.org/resources/introduction-daily-scrum', source: 'Scrum.org' },
+  sprintReview: { title: 'Introduction to the Sprint Review', url: 'https://www.scrum.org/resources/introduction-sprint-review', source: 'Scrum.org' },
+  sprintRetro: { title: 'Introduction to the Sprint Retrospective', url: 'https://www.scrum.org/resources/introduction-sprint-retrospective', source: 'Scrum.org' },
+  planningPoker: { title: 'Planning Poker', url: 'https://mountaingoatsoftware.com/agile/planning-poker', source: 'Mountain Goat Software (Mike Cohn)' },
+  invest: { title: 'INVEST in Good Stories, and SMART Tasks', url: 'https://xp123.com/invest-in-good-stories-and-smart-tasks/', source: 'Bill Wake' },
+  splitting: { title: 'The Humanizing Work Guide to Splitting User Stories', url: 'https://www.humanizingwork.com/the-humanizing-work-guide-to-splitting-user-stories/', source: 'Humanizing Work' },
+  definitionOfReady: { title: 'What is the Definition of Ready?', url: 'https://agilealliance.org/glossary/definition-of-ready/', source: 'Agile Alliance' },
+  sprintPlanningGlossary: { title: 'Sprint Planning', url: 'https://agilealliance.org/glossary/sprint-planning/', source: 'Agile Alliance' },
+  threeQuestions: { title: 'The three questions', url: 'https://agilealliance.org/glossary/three-questions/', source: 'Agile Alliance' },
+  retromat: { title: 'Retromat: activities and plans for retrospectives', url: 'https://retromat.org/en/', source: 'Retromat' },
+  primeDirective: { title: 'The Prime Directive', url: 'https://retrospectivewiki.org/index.php?title=The_Prime_Directive', source: 'Agile Retrospective Resource Wiki' },
+  heartbeatRetro: { title: 'What is a retrospective?', url: 'https://agilealliance.org/glossary/heartbeat-retrospective/', source: 'Agile Alliance' },
+  oneTwoFourAll: { title: '1-2-4-All: involve everyone in a discussion', url: 'https://www.liberatingstructures.com/1-2-4-all', source: 'Liberating Structures' },
+  pairing: { title: 'On Pair Programming', url: 'https://martinfowler.com/articles/on-pair-programming.html', source: 'Böckeler and Siessegger, martinfowler.com' },
+  pairingGlossary: { title: 'Pair programming', url: 'https://agilealliance.org/glossary/pair-programming/', source: 'Agile Alliance' },
+  mobbing: { title: 'Mob programming', url: 'https://agilealliance.org/glossary/mob-programming/', source: 'Agile Alliance' },
+} satisfies Record<string, GuideLink>;
 
 export type PageGuideId = 'overview' | 'backlog' | 'sprint' | 'events' | 'charter' | 'actions' | 'risks' | 'team';
 
@@ -43,6 +84,7 @@ export const PAGE_GUIDES: Record<PageGuideId, Guide> = {
       'Already have issues in GitLab? Use Import from GitLab, or Add several to paste titles.',
       'Estimates of 8 or more get a “consider splitting” hint (change the threshold on the Team page).',
     ],
+    links: [LINKS.invest, LINKS.splitting, LINKS.definitionOfReady],
   },
   sprint: {
     title: 'How to use the sprint board',
@@ -127,6 +169,17 @@ export const MEETING_GUIDES: Record<MeetingKind, Guide> = {
       '“?” means “I’m not sure”; “☕” means “I need a break”.',
       'Tick “I’m observing” if you are not part of the team that will do the work.',
     ],
+    prepare: [
+      'Refine the top of the Product Backlog first: stories need a clear description and acceptance criteria before anyone can size them.',
+      'Agree a reference story, for example a small, well-understood story worth 2 or 3 points, so everyone compares against the same thing.',
+      'Make sure the people who will do the work are there. A Product Owner or client can explain stories but usually observes.',
+    ],
+    pitfalls: [
+      'Anchoring: someone says a number before the reveal. Keep estimates to yourself until the cards are shown.',
+      'Converting points into hours. Points compare stories with each other; hours come later, when you plan tasks.',
+      'Endless debate. If a second round still differs widely, the story probably needs splitting or more information: park it.',
+    ],
+    links: [LINKS.planningPoker, LINKS.splitting, LINKS.invest],
   },
   retro: {
     title: 'How to run a retrospective',
@@ -144,6 +197,19 @@ export const MEETING_GUIDES: Record<MeetingKind, Guide> = {
       'For a two-week sprint, aim for 45–90 minutes. Use the suggested timer on each step.',
       'Vary the format from sprint to sprint so it doesn’t go stale.',
     ],
+    prepare: [
+      'Choose a format that suits the sprint. Start, Stop, Continue is a good first one; vary it later.',
+      'Look at the actions from the last retrospective on the Actions page.',
+      'Decide whether cards are anonymous. Anonymity helps while trust is still building.',
+      'The Scrum Guide caps the retrospective at three hours for a one-month sprint; shorter sprints usually need less.',
+    ],
+    pitfalls: [
+      'Blaming people. Keep to the Prime Directive and talk about the way of working, not individuals.',
+      'Too many actions. One to three, each with an owner, are far more likely to happen.',
+      'Only listing problems. Also ask what went well and should be kept.',
+      'Skipping it because nothing went wrong: that is when small improvements are easiest.',
+    ],
+    links: [LINKS.sprintRetro, LINKS.retromat, LINKS.primeDirective, LINKS.oneTwoFourAll, LINKS.heartbeatRetro],
   },
   daily: {
     title: 'How to run the Daily Scrum',
@@ -155,6 +221,18 @@ export const MEETING_GUIDES: Record<MeetingKind, Guide> = {
       'Add longer conversations to “After the Daily Scrum”. Only the people who need them stay.',
     ],
     tips: ['Talk about the Sprint Goal, not about being busy.', 'Same time, same place, every working day.'],
+    prepare: [
+      'Agree a fixed time and place (or call) as a team.',
+      'Keep the sprint board and the Sprint Goal visible.',
+      'Fill in your update before it starts, so the 15 minutes are spent talking rather than typing.',
+    ],
+    pitfalls: [
+      'Turning it into a status report to one person. Talk to each other about progress towards the Sprint Goal.',
+      'Solving problems during the Daily Scrum. Park them and continue afterwards with only the people who need them.',
+      'Running over 15 minutes.',
+      'The 2020 Scrum Guide no longer prescribes the three questions: use any structure that keeps the focus on the Sprint Goal. Sprintwell offers them as a starting point.',
+    ],
+    links: [LINKS.dailyScrum, LINKS.threeQuestions, LINKS.scrumGuide],
   },
   planning: {
     title: 'How to run Sprint Planning',
@@ -166,6 +244,19 @@ export const MEETING_GUIDES: Record<MeetingKind, Guide> = {
       'Confirm: check the plan and start the sprint.',
     ],
     tips: ['Don’t over-commit. Finishing fewer stories well beats leaving many half done.', 'Only Ready items can be added to the sprint. If one is not Ready, Sprintwell lists what is missing and you can fix it there and then: refining the Product Backlog during planning is fine.'],
+    prepare: [
+      'Order the Product Backlog and refine the top items until they are Ready. Teams without a Product Owner agree the order together.',
+      'Know your availability: holidays, other modules or deadlines, part-time work.',
+      'Check your recent velocity on the Sprint page, if you have one.',
+      'The Scrum Guide caps Sprint Planning at eight hours for a one-month sprint; shorter sprints usually need less.',
+    ],
+    pitfalls: [
+      'Starting without a Sprint Goal. The goal gives the sprint focus and room to adapt the detail.',
+      'Filling the sprint to 100% of capacity. Leave room for reviews, events and the unexpected.',
+      'Taking items that are not Ready. They cause surprises mid-sprint, which is why Sprintwell blocks them by default.',
+      'One person deciding the plan. The Developers decide how much they can do.',
+    ],
+    links: [LINKS.sprintPlanning, LINKS.sprintPlanningGlossary, LINKS.definitionOfReady, LINKS.splitting],
   },
   review: {
     title: 'How to run the Sprint Review',
@@ -177,6 +268,18 @@ export const MEETING_GUIDES: Record<MeetingKind, Guide> = {
       'Adapt: agree what matters next, then close the sprint.',
     ],
     tips: ['It is a working session, not a presentation: invite questions.', 'Hold the retrospective after the review.'],
+    prepare: [
+      'Invite the stakeholders or client in advance and tell them what you will show.',
+      'Check which stories meet the Definition of Done. Only those count as done.',
+      'Prepare a working environment for the demonstration, such as staging with test data.',
+      'The Scrum Guide caps the Sprint Review at four hours for a one-month sprint.',
+    ],
+    pitfalls: [
+      'A one-way slide presentation. Let stakeholders try the product and ask questions.',
+      'Showing work that is not Done as if it were.',
+      'Losing feedback. Record it and turn it into backlog items before you close the sprint.',
+    ],
+    links: [LINKS.sprintReview, LINKS.scrumGuide],
   },
   pairing: {
     title: 'How to use the pairing timer',
@@ -187,6 +290,17 @@ export const MEETING_GUIDES: Record<MeetingKind, Guide> = {
       'When the timer ends, roles swap automatically (or choose Swap now).',
     ],
     tips: ['Short rotations (5–15 minutes) keep both people engaged.', 'In strong-style pairing, ideas must go through the other person’s hands.'],
+    prepare: [
+      'Pick a task small enough for one session.',
+      'Agree the style and how often you swap.',
+      'Set up a shared screen or a shared editor so both people can see the code clearly.',
+    ],
+    pitfalls: [
+      'One person driving the whole time.',
+      'The navigator drifting off. Navigators think ahead and review; they are not spectators.',
+      'Pairing for a whole day without breaks. It is tiring; take regular breaks.',
+    ],
+    links: [LINKS.pairing, LINKS.pairingGlossary, LINKS.mobbing],
   },
 };
 

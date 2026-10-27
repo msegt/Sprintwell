@@ -1,0 +1,18 @@
+/* Preparation, pitfalls and further reading in guides. */
+.guide-more {
+  margin-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.5rem;
+}
+.guide-more > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--primary-strong);
+}
+.guide-links {
+  margin: 0.25rem 0 0.75rem;
+  padding-left: 1.1rem;
+}
+.guide-links li {
+  margin: 0.2rem 0;
+}

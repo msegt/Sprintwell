@@ -1,6 +1,7 @@
 import { CHECKIN_QUESTIONS, DECKS, MEETING_INFO, MEETING_KINDS, RETRO_TEMPLATES, type MeetingKind } from '@sprintwell/shared';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
+import { MEETING_GUIDES } from '../content/guides';
 import { api } from '../lib/api';
 import { useAction, useTeam } from '../lib/hooks';
 import { Button, Field, Modal } from './ui';
@@ -99,6 +100,22 @@ export function NewMeetingDialog({ kind, open, onClose, presetStoryIds }: { kind
         <p className="muted">
           {info.summary} <span className="small">Timebox: {info.timebox}</span>
         </p>
+        {MEETING_GUIDES[current].prepare && (
+          <details className="guide-more">
+            <summary>Before you start: a quick checklist</summary>
+            <ul className="guide-tips">
+              {MEETING_GUIDES[current].prepare!.map((t) => (
+                <li key={t}>{t}</li>
+              ))}
+            </ul>
+            <p className="small">
+              <Link to={`/guide#event-${current}`} target="_blank" rel="noopener">
+                Full guide for {info.name}
+                <span className="sr-only"> (opens in a new tab)</span>
+              </Link>
+            </p>
+          </details>
+        )}
 
         {current === 'retro' && (
           <>
