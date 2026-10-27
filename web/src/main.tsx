@@ -19,6 +19,8 @@ import { CharterPage } from './pages/Charter';
 import { ActionsPage } from './pages/Actions';
 import { RisksPage } from './pages/Risks';
 import { SettingsPage } from './pages/Settings';
+import { ActivityPage } from './pages/Activity';
+import { ClassPage, StaffJoinPage } from './pages/Classes';
 import { MeetingPage } from './meetings/MeetingPage';
 import '@fontsource-variable/inter';
 import '@fontsource-variable/bricolage-grotesque';
@@ -70,6 +72,8 @@ function Shell() {
           <Route path="/join/:code" element={<JoinPage />} />
           <Route path="/me" element={<ProfilePage />} />
           <Route path="/auth/gitlab/callback" element={<GitlabCallbackPage />} />
+          <Route path="/c/join/:code" element={<StaffJoinPage />} />
+          <Route path="/c/:classId" element={<ClassPage />} />
           <Route path="/guide" element={<GuidePage />} />
           <Route path="/support" element={<SupportPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
@@ -82,6 +86,7 @@ function Shell() {
             <Route path="actions" element={<ActionsPage />} />
             <Route path="risks" element={<RisksPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="activity" element={<ActivityPage />} />
             <Route path="m/:meetingId" element={<MeetingPage />} />
           </Route>
           <Route

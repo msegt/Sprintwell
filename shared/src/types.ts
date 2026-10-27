@@ -23,7 +23,8 @@ export interface GitlabIdentity {
   canUseApi: boolean;
 }
 
-export type TeamRole = 'admin' | 'member';
+/** 'coach' is teaching staff of the team's class: they can see everything and manage membership, but not change the team's work. */
+export type TeamRole = 'admin' | 'member' | 'coach';
 
 export interface MemberDTO {
   userId: string;
@@ -70,7 +71,114 @@ export interface TeamDTO {
   settings: TeamSettings;
   members: MemberDTO[];
   myRole: TeamRole;
+  /** The class this team belongs to, if a teacher created it. */
+  classInfo: TeamClassInfo | null;
 }
+
+export interface ResourceLink {
+  title: string;
+  url: string;
+}
+
+export interface TeamClassInfo {
+  id: string;
+  name: string;
+  requireGitlab: boolean;
+  /** Links the teaching staff added, e.g. module slides or the assessment brief. */
+  resources: ResourceLink[];
+}
+
+// ---------------------------------------------------------------------------
+// Classes (teaching staff)
+// ---------------------------------------------------------------------------
+
+export interface ClassSettings {
+  /** Students must sign in with GitLab before joining a team (verified identity for evidence). */
+  requireGitlab: boolean;
+  resources: ResourceLink[];
+}
+
+export const DEFAULT_CLASS_SETTINGS: ClassSettings = { requireGitlab: true, resources: [] };
+
+export type ClassRole = 'owner' | 'staff';
+
+export interface ClassSummaryDTO {
+  id: string;
+  name: string;
+  role: ClassRole;
+  teamCount: number;
+}
+
+export interface ClassTeamDTO {
+  id: string;
+  name: string;
+  inviteCode: string;
+  members: MemberDTO[];
+  lastActivityAt: string | null;
+  /** Logged actions in the last 7 days. */
+  recentActivity: number;
+}
+
+export interface ClassDTO {
+  id: string;
+  name: string;
+  staffCode: string;
+  settings: ClassSettings;
+  myRole: ClassRole;
+  staff: { userId: string; displayName: string; gitlabUsername: string | null; role: ClassRole }[];
+  teams: ClassTeamDTO[];
+}
+
+export interface ActivityDTO {
+  id: string;
+  at: string;
+  userId: string | null;
+  source: 'sprintwell' | 'gitlab';
+  kind: ActivityKind;
+  summary: string;
+  url: string;
+}
+
+export type ActivityKind =
+  | 'team'
+  | 'story'
+  | 'sprint'
+  | 'charter'
+  | 'action'
+  | 'risk'
+  | 'event'
+  | 'estimate'
+  | 'retro'
+  | 'daily'
+  | 'planning'
+  | 'review'
+  | 'pairing'
+  | 'gitlab-issue'
+  | 'gitlab-mr'
+  | 'gitlab-review'
+  | 'gitlab-commit'
+  | 'gitlab-other';
+
+export const ACTIVITY_KIND_NAMES: Record<ActivityKind, string> = {
+  team: 'Team',
+  story: 'Backlog',
+  sprint: 'Sprints',
+  charter: 'Charter',
+  action: 'Actions and impediments',
+  risk: 'Risks',
+  event: 'Events',
+  estimate: 'Planning Poker',
+  retro: 'Retrospectives',
+  daily: 'Daily Scrum',
+  planning: 'Sprint Planning',
+  review: 'Sprint Review',
+  pairing: 'Pairing',
+  'gitlab-issue': 'GitLab issues',
+  'gitlab-mr': 'GitLab merge requests',
+  'gitlab-review': 'GitLab reviews and comments',
+  'gitlab-commit': 'GitLab commits',
+  'gitlab-other': 'Other GitLab activity',
+};
 
 export type CharterKind = 'agreement' | 'dor' | 'dod';
 

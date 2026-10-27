@@ -1,0 +1,75 @@
+/* Classes, teaching-staff view and the activity log. */
+.coach-banner {
+  max-width: var(--page-max, 1180px);
+  margin: 0.75rem auto 0;
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius-sm);
+  background: var(--info-soft);
+  color: var(--info);
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.team-class {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.class-teams {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+}
+.class-team h3 {
+  margin: 0;
+}
+.class-members {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+  display: grid;
+  gap: 0.25rem;
+}
+.class-members li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+.activity-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.activity-list li {
+  display: grid;
+  grid-template-columns: 8.5rem 1fr auto;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+  align-items: baseline;
+}
+.activity-area {
+  color: var(--text-muted);
+  text-align: right;
+}
+.activity-summary td,
+.activity-summary th {
+  white-space: nowrap;
+}
+.field.inline {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+@media (max-width: 640px) {
+  .activity-list li {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+  .activity-area {
+    text-align: left;
+  }
+}

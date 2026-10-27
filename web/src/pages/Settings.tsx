@@ -8,7 +8,9 @@ import { api, download } from '../lib/api';
 import { useAction, useMe, usePageTitle, useTeam } from '../lib/hooks';
 
 export function SettingsPage() {
-  const { snap, teamId, isAdmin, me } = useTeam();
+  const { snap, teamId, isAdmin: teamAdmin, readOnly, me } = useTeam();
+  // Teaching staff of the class manage membership and settings like an admin.
+  const isAdmin = teamAdmin || readOnly;
   const { refresh: refreshMe } = useMe();
   const run = useAction();
   const navigate = useNavigate();
@@ -82,6 +84,7 @@ export function SettingsPage() {
         <p className="small muted">The CSV has title and description columns, which GitLab can import as issues.</p>
         <h3>Leave or delete</h3>
         <div className="row wrap">
+          {!readOnly && (
           <ConfirmButton
             confirmLabel="Leave this team"
             onConfirm={async () => {
@@ -93,6 +96,7 @@ export function SettingsPage() {
           >
             Leave team
           </ConfirmButton>
+          )}
           {isAdmin && (
             <ConfirmButton
               confirmLabel="Delete the team and all its data for everyone"
@@ -114,6 +118,7 @@ export function SettingsPage() {
 
 function TeamSettingsForm() {
   const { snap, teamId } = useTeam();
+  const inClass = !!snap.team.classInfo;
   const run = useAction();
   const [name, setName] = useState(snap.team.name);
   const [s, setS] = useState<TeamSettings>(snap.team.settings);
@@ -151,10 +156,13 @@ function TeamSettingsForm() {
         {(id, h) => <input id={id} aria-describedby={h} type="url" className="input" maxLength={500} value={s.trackerUrl} onChange={(e) => setS({ ...s, trackerUrl: e.target.value })} placeholder="https://git.example.ac.uk/group/project" />}
       </Field>
       <label className="check">
-        <input type="checkbox" checked={s.enforceReady} onChange={(e) => setS({ ...s, enforceReady: e.target.checked })} />
+        <input type="checkbox" checked={s.enforceReady} disabled={inClass} onChange={(e) => setS({ ...s, enforceReady: e.target.checked })} />
         <span>
           <strong>Only Ready items can enter a sprint</strong>
-          <span className="hint block">Items must meet your Definition of Ready; user stories also need the “As a… I want… so that…” format, acceptance criteria and all six INVEST checks. Recommended.</span>
+          <span className="hint block">
+            Items must meet your Definition of Ready; user stories also need the “As a… I want… so that…” format, acceptance criteria and all six INVEST checks.{' '}
+            {inClass ? `Always on in ${snap.team.classInfo!.name}.` : 'Recommended.'}
+          </span>
         </span>
       </label>
       <div>

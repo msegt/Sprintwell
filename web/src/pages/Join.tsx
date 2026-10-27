@@ -9,7 +9,7 @@ import { useAction, useMe, usePageTitle } from '../lib/hooks';
 export function JoinPage() {
   const { code = '' } = useParams();
   const { user, ensureUser, refresh, loading } = useMe();
-  const [preview, setPreview] = useState<{ teamName: string; memberCount: number } | null>(null);
+  const [preview, setPreview] = useState<{ teamName: string; memberCount: number; className: string | null; requireGitlab: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -18,7 +18,7 @@ export function JoinPage() {
   usePageTitle(preview ? `Join ${preview.teamName}` : 'Join a team');
 
   useEffect(() => {
-    api<{ teamName: string; memberCount: number }>('GET', `/api/invites/${encodeURIComponent(code)}`)
+    api<{ teamName: string; memberCount: number; className: string | null; requireGitlab: boolean }>('GET', `/api/invites/${encodeURIComponent(code)}`)
       .then(setPreview)
       .catch((e: Error) => setError(e.message));
   }, [code]);
@@ -47,6 +47,7 @@ export function JoinPage() {
     );
   }
   if (!preview || loading) return <div className="page narrow" aria-busy="true" />;
+  const needsGitlab = preview.requireGitlab && !user?.gitlab;
 
   return (
     <div className="page narrow">
@@ -54,8 +55,20 @@ export function JoinPage() {
         <p className="eyebrow">You are invited to join</p>
         <h1>{preview.teamName}</h1>
         <p className="muted">
+          {preview.className && <>Part of {preview.className}. </>}
           {preview.memberCount} member{preview.memberCount === 1 ? '' : 's'} so far.
         </p>
+        {needsGitlab ? (
+          <div className="stack">
+            <p>
+              {preview.className} asks everyone to <strong>sign in with GitLab</strong> before joining, so that your contributions are linked to your GitLab account.
+            </p>
+            <div>
+              <GitlabButton returnTo={`/join/${code}`} variant="primary" />
+            </div>
+          </div>
+        ) : (
+          <>
         {user ? (
           <p>
             You will join as <strong>{user.displayName}</strong>
@@ -74,6 +87,8 @@ export function JoinPage() {
             <GitlabButton returnTo={`/join/${code}`}>{user ? 'Verify with GitLab first' : 'Sign in with GitLab instead'}</GitlabButton>
           )}
         </div>
+          </>
+        )}
         {!user && (
           <p className="small muted">
             Sprintwell remembers you on this device. Read the <Link to="/privacy">privacy notes</Link>.

@@ -13,6 +13,8 @@ import {
 } from '@sprintwell/shared/schemas';
 import type { Repo } from '../repo';
 import { forbidden, notFound, now, newId, parseJson } from '../util';
+import { logActivity } from '../activity';
+import { attendance, describeCommand } from './activity';
 import { MeetingError, md, type Engine, type EngineCtx, type MeetingRecord } from './engine';
 import { dailyEngine, pairingEngine, planningEngine, reviewEngine } from './others';
 import { pokerEngine } from './poker';
@@ -194,15 +196,20 @@ export class MeetingManager {
     return this.enqueue(runtime, async () => {
       const r = runtime.record;
       const role = await this.repo.membership(r.teamId, actorId);
-      if (!role) throw forbidden('You are not a member of this team.');
+      if (!role) {
+        if ((await this.repo.access(r.teamId, actorId)) === 'coach') throw new MeetingError('Teaching staff can watch events but not take part.');
+        throw forbidden('You are not a member of this team.');
+      }
       const members = await this.repo.members(r.teamId);
       const working: MeetingRecord = { ...r, timer: { ...r.timer }, state: structuredClone(r.state) };
       let teamTouched = false;
       const ctx = this.ctx(working, actorId, role, members, () => (teamTouched = true));
 
       const common = commonCommand.safeParse(raw);
+      let applied: { type: string } & Record<string, unknown>;
       if (common.success) {
         this.applyCommon(ctx, common.data);
+        applied = common.data;
       } else {
         if (r.endedAt) throw new MeetingError('This meeting has ended. The facilitator can reopen it.');
         const engine = ENGINES[r.kind];
@@ -212,6 +219,7 @@ export class MeetingManager {
           throw new MeetingError('Only the facilitator can do that.');
         }
         await engine.apply(ctx, parsed.data);
+        applied = parsed.data as { type: string } & Record<string, unknown>;
       }
 
       const listChanged = working.phase !== r.phase || working.title !== r.title || working.endedAt !== r.endedAt || working.facilitatorId !== r.facilitatorId;
@@ -220,7 +228,16 @@ export class MeetingManager {
       this.scheduleTimer(runtime);
       this.broadcast(runtime);
       if (teamTouched || listChanged) this.out.notifyTeam(r.teamId);
+      const entries = describeCommand(r, runtime.record, actorId, applied);
+      if (entries.length) await logActivity(this.repo.db, entries.map((e) => ({ ...e, teamId: r.teamId })));
     });
+  }
+
+  /** Records that a team member joined an event (once per person and event). */
+  async recordAttendance(meetingId: string, userId: string): Promise<void> {
+    const runtime = await this.load(meetingId).catch(() => null);
+    if (!runtime || runtime.record.endedAt) return;
+    await logActivity(this.repo.db, attendance(runtime.record, userId));
   }
 
   private ctx(working: MeetingRecord, actorId: string, role: TeamRole, members: MemberDTO[], touch: () => void): EngineCtx<unknown> {

@@ -190,6 +190,8 @@ export interface TeamCtx {
   snap: TeamSnapshot;
   me: UserDTO;
   isAdmin: boolean;
+  /** Teaching staff of the team's class: can see everything and manage membership, but not change the team's work. */
+  readOnly: boolean;
   refresh(): Promise<void>;
   /** Display name for a user id, including people who have left. */
   name(id: string | null | undefined): string;

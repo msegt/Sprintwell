@@ -173,6 +173,27 @@ export const createMeetingBody = z.object({
 export const gitlabStartBody = z.object({ purpose: z.enum(['signin', 'grant']).default('signin'), returnTo: z.string().max(300).default('/') });
 export const gitlabCallbackBody = z.object({ code: z.string().min(1).max(512), state: z.string().min(10).max(128) });
 
+const resourceLink = z.object({ title: required(LIMITS.title), url: url.refine((v) => v !== '', 'Add a link') });
+
+export const createClassBody = z.object({ name: required(LIMITS.teamName) });
+export const updateClassBody = z.object({
+  name: required(LIMITS.teamName).optional(),
+  settings: z
+    .object({
+      requireGitlab: z.boolean().optional(),
+      resources: z.array(resourceLink).max(20).optional(),
+    })
+    .optional(),
+});
+export const classTeamsBody = z.object({ names: z.array(required(LIMITS.teamName)).min(1).max(50) });
+export const joinStaffBody = z.object({ code: z.string().trim().min(6).max(32) });
+export const activityQuery = z.object({
+  userId: id.optional(),
+  kind: z.string().max(30).optional(),
+  before: z.string().max(40).optional(),
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+});
+
 export const deviceLinkRedeemBody = z.object({ code: z.string().trim().min(6).max(32) });
 
 // ---------------------------------------------------------------------------

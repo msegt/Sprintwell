@@ -18,7 +18,7 @@ describe('identity and teams', () => {
     expect(snap.body.team.myRole).toBe('member');
     expect(snap.body.charter.filter((c: any) => c.kind === 'dor').length).toBeGreaterThan(3);
     const preview = await s.api('GET', `/api/invites/${code}`);
-    expect(preview.body).toEqual({ teamName: 'Team Rocket', memberCount: 2 });
+    expect(preview.body).toEqual({ teamName: 'Team Rocket', memberCount: 2, className: null, requireGitlab: false });
     const me = await s.api('GET', '/api/me', admin.token);
     expect(me.body.teams[0].role).toBe('admin');
   });

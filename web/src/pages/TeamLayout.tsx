@@ -1,6 +1,8 @@
 import { useCallback, useMemo } from 'react';
 import { Link, NavLink, Outlet, useParams } from 'react-router';
+import { Icon } from '../components/ui';
 import { TeamContext, useMe, useTeamData, type TeamCtx } from '../lib/hooks';
+import '../styles/classes.css';
 
 const TABS = [
   ['', 'Overview'],
@@ -10,6 +12,7 @@ const TABS = [
   ['charter', 'Charter'],
   ['actions', 'Actions'],
   ['risks', 'Risks'],
+  ['activity', 'Activity'],
   ['settings', 'Team'],
 ] as const;
 
@@ -27,7 +30,7 @@ export function TeamLayout() {
   );
 
   const ctx = useMemo<TeamCtx | null>(
-    () => (snap && user ? { teamId, snap, me: user, isAdmin: snap.team.myRole === 'admin', refresh, name } : null),
+    () => (snap && user ? { teamId, snap, me: user, isAdmin: snap.team.myRole === 'admin', readOnly: snap.team.myRole === 'coach', refresh, name } : null),
     [teamId, snap, user, refresh, name],
   );
 
@@ -55,7 +58,15 @@ export function TeamLayout() {
     <TeamContext.Provider value={ctx}>
       <div className="team-head">
         <div className="team-head-inner">
-          <p className="team-name">{ctx.snap.team.name}</p>
+          <p className="team-name">
+            {ctx.snap.team.name}
+            {ctx.snap.team.classInfo && (
+              <span className="team-class small">
+                {' '}
+                · {ctx.readOnly ? <Link to={`/c/${ctx.snap.team.classInfo.id}`}>{ctx.snap.team.classInfo.name}</Link> : ctx.snap.team.classInfo.name}
+              </span>
+            )}
+          </p>
           <nav aria-label="Team" className="tabs">
             {TABS.map(([path, label]) => (
               <NavLink key={path} to={path ? `/t/${teamId}/${path}` : `/t/${teamId}`} end={path === ''} className={({ isActive }) => `tab${isActive ? ' tab-active' : ''}`}>
@@ -65,6 +76,11 @@ export function TeamLayout() {
           </nav>
         </div>
       </div>
+      {ctx.readOnly && (
+        <div className="coach-banner" role="note">
+          <Icon name="eye" size={16} /> You are viewing this team as teaching staff. You can see everything and manage membership on the Team tab, but you cannot change the team’s work or take part in its events.
+        </div>
+      )}
       <Outlet />
     </TeamContext.Provider>
   );

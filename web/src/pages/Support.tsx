@@ -38,8 +38,7 @@ export function SupportPage() {
         <h2>Where Sprintwell is heading</h2>
         <p>The plan is for the core to stay free and open source, including for education. Possible paid extras for organisations include:</p>
         <ul>
-          <li>Two-way sync with GitLab, GitHub and Jira</li>
-          <li>Educator spaces to follow many student teams at once</li>
+          <li>Sync with GitHub and Jira</li>
           <li>Single sign-on and organisation administration</li>
           <li>Longer-term analytics such as team health trends</li>
         </ul>
@@ -76,6 +75,10 @@ export function PrivacyPage() {
       <h2>What is stored</h2>
       <ul>
         <li>The display name you choose. No email address or password is needed.</li>
+        <li>
+          If you sign in with GitLab: your GitLab user id, username and name, and the access tokens GitLab issues, stored encrypted. Disconnect GitLab from your profile at any time.
+        </li>
+        <li>An activity log of what each person does in a team (for example “wrote a story”, “took part in the Daily Scrum”), with the time.</li>
         <li>A random sign-in token kept in your browser; the server stores only a one-way hash of it.</li>
         <li>Your team memberships and the content your team creates: stories, sprints, the team charter, actions, risks and meeting content such as cards, votes and notes.</li>
         <li>Basic server logs (for example IP addresses) for security and troubleshooting, kept by the server operator.</li>
@@ -83,6 +86,11 @@ export function PrivacyPage() {
       <h2>Who can see it</h2>
       <ul>
         <li>Team content is visible to members of that team only. Anyone with a valid invite link can join, so share it with care and regenerate it if it leaks.</li>
+        <li>
+          If a teacher created your team as part of a class, the class’s teaching staff can also see all of the team’s content and its activity log, read-only, and download it. Teams
+          show the class name at the top of every page.
+        </li>
+        <li>The activity log never records anonymous retrospective cards, dot votes, the safety check or the values of Planning Poker votes.</li>
         <li>In anonymous retrospectives, other people never see who wrote a card. The server still records the author so you can edit your own cards.</li>
         <li>Planning Poker votes are hidden from everyone else until the facilitator reveals them.</li>
       </ul>

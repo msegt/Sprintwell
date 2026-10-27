@@ -180,4 +180,45 @@ export const migrations: Record<string, Migration> = {
         .execute();
     },
   },
+
+  '004_classes_activity': {
+    async up(db: Kysely<any>) {
+      // A class groups teams run by teaching staff (e.g. one cohort of a module).
+      await db.schema
+        .createTable('classes')
+        .addColumn('id', 'text', (c) => c.primaryKey())
+        .addColumn('name', 'text', (c) => c.notNull())
+        .addColumn('staff_code', 'text', (c) => c.notNull().unique())
+        .addColumn('settings', 'text', (c) => c.notNull())
+        .addColumn('created_by', 'text', (c) => c.notNull())
+        .addColumn('created_at', 'text', (c) => c.notNull())
+        .execute();
+      await db.schema
+        .createTable('class_staff')
+        .addColumn('class_id', 'text', (c) => c.notNull().references('classes.id').onDelete('cascade'))
+        .addColumn('user_id', 'text', (c) => c.notNull().references('users.id').onDelete('cascade'))
+        .addColumn('role', 'text', (c) => c.notNull())
+        .addColumn('added_at', 'text', (c) => c.notNull())
+        .addPrimaryKeyConstraint('class_staff_pk', ['class_id', 'user_id'])
+        .execute();
+      await db.schema.createIndex('class_staff_user_idx').on('class_staff').column('user_id').execute();
+      await db.schema.alterTable('teams').addColumn('class_id', 'text').execute();
+      await db.schema.createIndex('teams_class_idx').on('teams').column('class_id').execute();
+
+      // Who did what in a team, for the team itself and its teaching staff.
+      await db.schema
+        .createTable('activity')
+        .addColumn('id', 'text', (c) => c.primaryKey())
+        .addColumn('team_id', 'text', (c) => c.notNull().references('teams.id').onDelete('cascade'))
+        .addColumn('user_id', 'text')
+        .addColumn('at', 'text', (c) => c.notNull())
+        .addColumn('source', 'text', (c) => c.notNull())
+        .addColumn('kind', 'text', (c) => c.notNull())
+        .addColumn('summary', 'text', (c) => c.notNull())
+        .addColumn('url', 'text', (c) => c.notNull())
+        .addColumn('dedupe', 'text', (c) => c.unique())
+        .execute();
+      await db.schema.createIndex('activity_team_at_idx').on('activity').columns(['team_id', 'at']).execute();
+    },
+  },
 };

@@ -78,13 +78,13 @@ export function MeetingPage() {
 
 function MeetingHeader() {
   const { view, send, isFacilitator, ended } = useRoom();
-  const { snap, teamId, name, isAdmin, me } = useTeam();
+  const { snap, teamId, name, isAdmin, me, readOnly } = useTeam();
   const run = useAction();
   const [manage, setManage] = useState(false);
   const phases = PHASES[view.kind];
   const idx = phases.findIndex((p) => p.id === view.phase);
   const facilitatorOnline = view.online.includes(view.facilitatorId);
-  const canClaim = !isFacilitator && (!facilitatorOnline || isAdmin);
+  const canClaim = !readOnly && !isFacilitator && (!facilitatorOnline || isAdmin);
 
   return (
     <header className="meeting-head">
