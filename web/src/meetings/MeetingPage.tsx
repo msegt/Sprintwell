@@ -163,7 +163,7 @@ function MeetingHeader() {
 
       <StepHint kind={view.kind} phase={view.phase} isFacilitator={isFacilitator} ended={ended} onStartTimer={(seconds) => void send({ type: 'timerStart', seconds })} />
 
-      <Modal open={manage} onClose={() => setManage(false)} title="Manage this event">
+      <Modal open={manage} onClose={() => setManage(false)} title="Manage this event" instant>
         <div className="stack">
           <Button onClick={() => run(() => download(`/api/teams/${teamId}/meetings/${view.id}/summary.md`, 'summary.md'))}>
             <Icon name="download" /> Download summary (Markdown)
