@@ -2,10 +2,13 @@
 
 This is a working plan, not a commitment. Priorities should follow what teams actually ask for once they use it.
 
-## Now (0.2)
+## Now (0.3)
 
 - Planning Poker, retrospectives (ten formats plus custom), Sprint Planning, Daily Scrum, Sprint Review, pairing timer
-- Product Backlog with INVEST and the Definition of Ready, sprint board, burndown, velocity
+- Product Backlog with INVEST and the Definition of Ready, enforced when items enter a sprint; sprint board, burndown, velocity
+- Sign in with GitLab; GitLab project sync (issues, milestones, merge requests, reviews, commits; estimates written back)
+- Classes for teaching staff, and a per-team activity log
+- Guidance with preparation, pitfalls and further reading for every event
 - Team charter, actions and impediments, risk register
 - Anonymous identity with sign-in codes for other devices; exports; personal data deletion
 - SQLite and PostgreSQL; Docker; automated tests on both databases; accessibility checks
@@ -13,6 +16,8 @@ This is a working plan, not a commitment. Priorities should follow what teams ac
 
 ## Next (free core)
 
+- **More GitLab sync.** Write sprint membership (milestones) and status back to GitLab; react to GitLab webhooks instead of syncing on request.
+- **Sync timing.** Background sync on a schedule (Cloudflare Cron Triggers) rather than only when someone asks.
 - **Email sign-in (magic links).** Optional, and attaches to the existing anonymous identity. Needed for recovering an account and for any paid plan.
 - **Team health check.** For example the Spotify squad health check model, with trends across sprints.
 - **More retrospective activities.** Timeline, a "Kudos" round, and random activity picking (as Retromat does).
@@ -28,8 +33,8 @@ The open-source core should stay complete and free, including for education. Pai
 
 | Candidate | Why it could be paid |
 |---|---|
-| Two-way sync with GitLab, GitHub and Jira (estimates, status, sprint membership) | Ongoing maintenance of integrations; webhooks |
-| Educator / organisation spaces: see many teams at once, compare velocity and actions, export for marking | Mainly valuable to institutions |
+| Sync with GitHub and Jira | Ongoing maintenance of integrations; webhooks |
+| Organisation spaces beyond single classes: many classes, cross-team comparisons, institution admin | Mainly valuable to institutions |
 | Single sign-on (SAML or OIDC), domain-restricted teams, organisation admin | Enterprise requirement |
 | AI assistance: grouping suggestions, retrospective summaries, story-splitting prompts | Model costs per use |
 | Longer analytics: team health and velocity trends across terms | Storage and compute |

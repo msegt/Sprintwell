@@ -4,7 +4,7 @@ Sprintwell is a free, open-source web app that Agile teams use to run their own 
 
 It was designed around how Scrum (2020 Scrum Guide) and Extreme Programming practices are taught on the MSc module CMT651 Agile Software Development at Cardiff University. It is meant to be just as useful to any other team.
 
-> **Status: early version (0.2).** All the core features work and have automated tests, but it has not yet been used by real teams. Expect rough edges.
+> **Status: early version (0.3).** All the features below work and have automated tests (including against a simulated GitLab), but it has not yet been used by real teams or connected to a real GitLab server. Expect rough edges.
 
 **Hosting:** Sprintwell runs on Cloudflare's free plan with no server to look after (Workers, Durable Objects and D1), or as a normal Node.js server. See **[docs/DEPLOY.md](docs/DEPLOY.md)**.
 
@@ -18,13 +18,17 @@ It was designed around how Scrum (2020 Scrum Guide) and Extreme Programming prac
 | **Daily Scrum** | Puts the Sprint Goal on screen and shuffles the speaking order. Each person gets a timer and writes an update against the three Sprint Goal questions beforehand. Blockers can be recorded as impediments, and there is a list for conversations after the Daily Scrum. |
 | **Sprint Review** | Shows done and not-done work for the increment, with a "Sprint Goal met?" record. Stakeholder feedback goes straight into the Product Backlog, and the sprint is closed with unfinished work returned to the backlog. |
 | **Pairing timer** | Rotates roles in driver/navigator, strong-style, ping-pong or mob programming, with automatic hand-over. |
-| **Product Backlog** | User stories written as "As a… I want… so that…", with acceptance criteria and tasks. Each story has an INVEST self-check and a Definition of Ready checklist. You can bulk-add stories, import open issues from GitLab in the browser, and export a CSV that GitLab can import. |
+| **Product Backlog** | User stories, bugs, spikes and technical tasks. User stories are written as "As a… I want… so that…", with acceptance criteria and tasks, an INVEST self-check and a Definition of Ready checklist. **Only Ready items can enter a sprint** (user stories also need the story format, acceptance criteria and all INVEST checks); Sprintwell lists what is missing and lets the team fix it on the spot, including during Sprint Planning. Bulk-add stories, export a CSV that GitLab can import. |
+| **GitLab** | Sign in with GitLab for a verified identity. Link the team's GitLab project to import issues (reading the story sentence and acceptance criteria) and milestones (as sprints), record merge requests, reviews, comments and commits in the activity log, and send estimates (including Planning Poker results) back to GitLab as issue weights or `points::N` labels. |
+| **Classes for teaching staff** | Create a class, add its teams in one go and share an invite link per team. Students join after signing in with GitLab (optional). Staff see every team read-only, add course links shown to all teams, invite colleagues and download a per-student activity summary. |
+| **Activity log** | Who did what and when in each team, with a summary per person and CSV export. Hidden or anonymous contributions (Poker vote values, retrospective card text, anonymous cards, dot votes, the safety check) are never attributed. It shows activity, not the quality of a contribution. |
 | **Sprint board** | To do, in progress and done columns, a burndown chart and velocity history. |
 | **Team charter** | Working agreement, Definition of Ready and Definition of Done as living, printable lists. |
 | **Actions and impediments** | Owners, due dates and links back to the event they came from. Retrospectives open by reviewing them. |
 | **Risk register** | Likelihood × impact heat map, with legal, ethical, social, professional, security and technical categories, countermeasures, owners and status. |
-| **Facilitation** | Every event has a shared timer, presence, a step-by-step flow, hand-over or take-over of the facilitator role (so it can rotate), and a Markdown summary export. |
-| **Built-in guidance** | Every page and event has a short "How this works" panel. During events, a hint bar tells the facilitator and everyone else what to do in the current step, with a suggested timebox and a one-click timer. New teams get a Getting started checklist, and `/guide` gathers everything on one page you can link from a course site. |
+| **Facilitation** | Every event has a shared timer, presence, a step-by-step flow, hand-over or take-over of the facilitator role (so it can rotate), and a Markdown summary export. The last step shows a clear Finish event button; closing a sprint or starting one ends the review or planning, and events left untouched for six hours finish on their own. |
+| **Built-in guidance** | Every page and event has a short "How this works" panel, with what to prepare, common pitfalls and links to further reading (Scrum Guide, Scrum.org, Agile Alliance, Retromat and others). During events, a hint bar tells the facilitator and everyone else what to do in the current step, with a suggested timebox and a one-click timer. New teams get a Getting started checklist, and `/guide` gathers everything on one page you can link from a course site. |
+| **Forms** | Dialogs ask before discarding unsaved changes when you click outside them or press Escape. |
 | **Data** | Full team export as JSON, personal data export and deletion. No tracking. |
 
 Accessibility is a design goal, not an add-on. Everything works from the keyboard, nothing relies on colour alone, step changes and reveals are announced to screen readers, reduced-motion settings are respected and there is a dark mode. End-to-end tests run axe-core on the main pages and events and fail on any serious or critical WCAG 2.1 AA violation. Automated checks only catch some kinds of problem, so testing with real assistive-technology users is still needed.
@@ -36,10 +40,11 @@ Accessibility is a design goal, not an add-on. Everything works from the keyboar
 - **No usage limits.** Parabol's free plan is limited to 2 teams, 10 meetings a month and 30 days of history (per its pricing page in October 2026). Sprintwell has no such limits, which matters for a class with several student teams meeting every week.
 - **It teaches as well as records.** INVEST and the Definition of Ready live on every story, and the Prime Directive, Sprint Goal guidance and capacity tips appear inside the events.
 - **It covers the whole Scrum cycle.** That includes a backlog, sprint board, risk register and team charter, not only meetings.
-- **It works with self-managed GitLab.** Your browser reads the issues directly, so VPN-only university servers such as `git.cardiff.ac.uk` can still work. In Parabol, self-managed GitLab is an Enterprise feature.
+- **It works with self-managed GitLab.** Sign-in, import, activity and estimate sync work with your own GitLab server, as long as it is reachable from the internet. (Without a server-side GitLab set-up, a browser-based issue import still works with VPN-only servers.) In Parabol, self-managed GitLab is an Enterprise feature.
+- **It is built for teaching.** Teaching staff can create class teams and follow each team's activity as evidence for assessment.
 - **Exports suit reflective portfolios.** Meeting summaries download as Markdown.
 
-What Parabol has and Sprintwell does not (yet): email accounts and SSO, two-way Jira/GitHub/GitLab sync, AI summaries, team health checks, many more templates, SOC 2 compliance and a professionally run hosted service.
+What Parabol has and Sprintwell does not (yet): email accounts and SSO, Jira and GitHub integrations, full two-way GitLab sync (Sprintwell syncs estimates, imports issues and milestones, but does not yet write status or sprint membership back), AI summaries, team health checks, many more templates, SOC 2 compliance and a professionally run hosted service.
 
 ## Quick start (local)
 
@@ -85,9 +90,10 @@ More detail is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Plans, including
 
 ## Using Sprintwell with students
 
-- Each team creates its own space and shares the invite link. The lecturer can join each team with the same link to follow along.
-- Accounts are anonymous: a display name and a token stored in the browser. People can sign in on a second device with a one-time code from their profile.
-- Before using a hosted copy with a class, check your institution's rules on third-party tools that process student data. In the UK this often means a data protection impact assessment. The privacy page in the app describes what is stored, but whoever runs the server is responsible for the privacy notice.
+- **Classes.** Create a class from the home page, add your teams and share each team's invite link. You see every team read-only and can download the activity summary. Colleagues (a moderator, teaching assistants) join through a separate staff link.
+- **Identity.** With Sign in with GitLab set up (docs/DEPLOY.md), a class can require students to sign in with GitLab before joining, so activity is tied to a GitLab account rather than a typed name. Without it, accounts are a display name and a token in the browser.
+- **The activity log is evidence, not a mark.** It counts actions; it cannot tell a thoughtful review from a trivial one, and some valuable work (talking, pairing at one keyboard) leaves little trace. Tell students it exists, that their team can see it too, and how you will use it.
+- **Data protection.** Before using a hosted copy with a class, check your institution's rules on third-party tools that process student data. In the UK this often means a data protection impact assessment, especially now that activity is logged and linked to GitLab accounts. The privacy page in the app describes what is stored, but whoever runs the server is responsible for the privacy notice.
 
 ## Licence
 
