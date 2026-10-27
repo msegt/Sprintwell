@@ -1,3 +1,4 @@
+import '../styles/finish.css';
 import { MEETING_INFO, PHASES, type MeetingView } from '@sprintwell/shared';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
@@ -158,8 +159,17 @@ function MeetingHeader() {
               Next: {phases[idx + 1]!.name} <Icon name="arrow" size={14} />
             </Button>
           )}
+          {isFacilitator && !ended && idx === phases.length - 1 && <FinishButton small />}
         </nav>
       )}
+      {phases.length <= 1 && isFacilitator && !ended && (
+        <div className="row">
+          <FinishButton small />
+        </div>
+      )}
+
+      {!ended && idx === phases.length - 1 && <FinishCallout />}
+      {ended && <EndedBanner />}
 
       <StepHint kind={view.kind} phase={view.phase} isFacilitator={isFacilitator} ended={ended} onStartTimer={(seconds) => void send({ type: 'timerStart', seconds })} />
 
@@ -206,6 +216,78 @@ function MeetingHeader() {
         </div>
       </Modal>
     </header>
+  );
+}
+
+/** Ends the event for everyone. Ending is reversible (Reopen), so it needs only one click. */
+function FinishButton({ small }: { small?: boolean }) {
+  const { send } = useRoom();
+  const { notify } = useNotice();
+  return (
+    <Button
+      variant="primary"
+      small={small}
+      className="finish-btn"
+      onClick={async () => {
+        if (await send({ type: 'end' })) notify('Event finished. Its summary is saved under Events.', 'success');
+      }}
+    >
+      <Icon name="check" size={16} /> Finish event
+    </Button>
+  );
+}
+
+/** Shown on the last step so nobody has to hunt for how to end the event. */
+function FinishCallout() {
+  const { view, isFacilitator } = useRoom();
+  const { name } = useTeam();
+  const facilitatorHere = view.online.includes(view.facilitatorId);
+  return (
+    <div className="finish-callout" role="note">
+      <span className="finish-icon" aria-hidden="true">
+        <Icon name="flag" size={20} />
+      </span>
+      <div className="finish-text">
+        <strong>Last step.</strong>{' '}
+        {isFacilitator ? (
+          <>When you have finished, choose Finish event. Everyone sees the summary, and actions appear on the Overview. You can reopen it later if needed.</>
+        ) : facilitatorHere ? (
+          <>{name(view.facilitatorId)} will finish the event when the team is done.</>
+        ) : (
+          <>The facilitator has left. Choose Take over above to finish the event.</>
+        )}
+      </div>
+      {isFacilitator && <FinishButton />}
+    </div>
+  );
+}
+
+function EndedBanner() {
+  const { view, send, isFacilitator } = useRoom();
+  const { teamId, isAdmin } = useTeam();
+  const run = useAction();
+  return (
+    <div className="ended-banner" role="status">
+      <span className="finish-icon" aria-hidden="true">
+        <Icon name="check" size={20} />
+      </span>
+      <div className="finish-text">
+        <strong>This event has finished.</strong> Its summary is saved under Events, and any actions are on the Overview.
+      </div>
+      <div className="row wrap">
+        <Button small onClick={() => run(() => download(`/api/teams/${teamId}/meetings/${view.id}/summary.md`, 'summary.md'))}>
+          <Icon name="download" /> Summary
+        </Button>
+        <Link className="btn btn-secondary btn-small" to={`/t/${teamId}`}>
+          Back to overview
+        </Link>
+        {(isFacilitator || isAdmin) && (
+          <Button small variant="ghost" onClick={() => send({ type: 'reopen' })}>
+            Reopen
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 

@@ -182,6 +182,11 @@ export function registerApi(app: ApiRouter, deps: Deps): void {
   app.get('/api/teams/:teamId', async (req) => {
     const { teamId } = req.params as Params;
     const { role } = await member(req, teamId!);
+    const ended = await meetings.endStale(teamId!);
+    if (ended.length) {
+      for (const id of ended) realtime.forgetMeeting(teamId!, id);
+      changed(teamId!);
+    }
     return repo.snapshot(teamId!, role);
   });
 

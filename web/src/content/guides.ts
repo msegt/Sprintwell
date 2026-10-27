@@ -64,7 +64,7 @@ export const PAGE_GUIDES: Record<PageGuideId, Guide> = {
       'The Sprint Retrospective closes the sprint: how can the team work better?',
       'Planning Poker and the pairing timer are practices you can use whenever you need them.',
     ],
-    tips: ['Whoever starts an event becomes its facilitator. They can hand over from Manage.', 'Finished events keep a summary you can download as Markdown, for example for your portfolio.'],
+    tips: ['Whoever starts an event becomes its facilitator. They can hand over from Manage.', 'On the last step, the facilitator chooses Finish event. Events left untouched for 6 hours finish on their own.', 'Finished events keep a summary you can download as Markdown, for example for your portfolio.'],
   },
   charter: {
     title: 'How to use the team charter',
@@ -253,7 +253,7 @@ export const PHASE_HINTS: Record<MeetingKind, Record<string, PhaseHint>> = {
       minutes: 15,
     },
     parking: {
-      facilitator: 'Go through the parked topics with only the people who need them, then end the event.',
+      facilitator: 'Go through the parked topics with only the people who need them, then choose Finish event.',
       everyone: 'Stay only for the topics you are needed for.',
     },
   },

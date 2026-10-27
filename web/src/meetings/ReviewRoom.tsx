@@ -197,9 +197,12 @@ function Adapt() {
             variant="primary"
             small={false}
             confirmLabel={unfinished ? `Close ${sprint.name}: ${unfinished} unfinished stories go back to the backlog` : `Close ${sprint.name}`}
-            onConfirm={() => run(() => api('POST', `/api/teams/${teamId}/sprints/${sprint.id}/close`), `${sprint.name} closed`)}
+            onConfirm={async () => {
+              const ok = await run(() => api('POST', `/api/teams/${teamId}/sprints/${sprint.id}/close`), `${sprint.name} closed`);
+              if (ok) await send({ type: 'end' });
+            }}
           >
-            Close {sprint.name}
+            Close {sprint.name} and end the review
           </ConfirmButton>
         )}
         {sprint.status === 'closed' && <p>{sprint.name} is closed. Next: the Sprint Retrospective.</p>}

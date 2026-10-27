@@ -50,6 +50,9 @@ export interface ManagerOptions {
   cache?: boolean;
 }
 
+/** Events idle for longer than this end automatically. */
+export const STALE_AFTER_MS = 6 * 60 * 60_000;
+
 const EMPTY_TIMER: TimerState = { endsAt: null, pausedRemainingMs: null, durationMs: 0 };
 
 interface Runtime {
@@ -387,6 +390,33 @@ export class MeetingManager {
       if (this.cache.get(id) === runtime) this.cache.delete(id);
     }, this.evictAfterMs);
     (runtime.evict as { unref?: () => void }).unref?.();
+  }
+
+  /**
+   * Ends events nobody has touched for a while, so forgotten events do not stay
+   * "in progress" for ever. Returns the ids of the events it ended.
+   */
+  async endStale(teamId: string, idleMs = STALE_AFTER_MS): Promise<string[]> {
+    const cutoff = new Date(Date.now() - idleMs).toISOString();
+    const stale = await this.repo.db
+      .selectFrom('meetings')
+      .select('id')
+      .where('team_id', '=', teamId)
+      .where('ended_at', 'is', null)
+      .where('updated_at', '<', cutoff)
+      .execute();
+    const ended: string[] = [];
+    if (stale.length === 0) return ended;
+    const ts = now();
+    for (const { id } of stale) {
+      const cached = this.cache.get(id);
+      // A meeting still in use in this process is not stale.
+      if (cached && Date.parse(cached.record.updatedAt) >= Date.parse(cutoff)) continue;
+      await this.repo.db.updateTable('meetings').set({ ended_at: ts }).where('id', '=', id).where('ended_at', 'is', null).execute();
+      this.forget(id);
+      ended.push(id);
+    }
+    return ended;
   }
 
   /** Forgets a cached meeting (after it was deleted elsewhere). */
