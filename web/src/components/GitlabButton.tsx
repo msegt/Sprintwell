@@ -14,7 +14,7 @@ export function GitlabButton({ purpose = 'signin', returnTo, children, variant =
   const config = usePublicConfig();
   const run = useAction();
   const [busy, setBusy] = useState(false);
-  if (!config?.gitlab.enabled) return null;
+  if (!config?.gitlab.oauth) return null;
   return (
     <Button
       variant={variant}

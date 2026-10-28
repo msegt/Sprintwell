@@ -28,9 +28,8 @@ export default defineConfig({
           reuseExistingServer: false,
           env: {
             PORT: String(PORT),
+            // Token-only GitLab (no OAuth application), as on git.cardiff.ac.uk.
             GITLAB_URL: `http://127.0.0.1:${MOCK_GITLAB_PORT}`,
-            GITLAB_CLIENT_ID: 'mock-client-id',
-            GITLAB_CLIENT_SECRET: 'mock-client-secret',
             SPRINTWELL_SECRET: 'e2e-secret-that-is-long-enough',
           },
         },

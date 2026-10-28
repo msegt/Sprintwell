@@ -14,7 +14,11 @@ export interface Config {
   trustProxy: boolean;
   logLevel: string;
   version: string;
-  /** Sign in with GitLab and GitLab sync. Disabled unless url, clientId, clientSecret and secret are all set. */
+  /**
+   * GitLab features. With url and secret: verifying GitLab accounts with a
+   * personal access token, project sync with project access tokens, webhooks.
+   * With clientId and clientSecret too: Sign in with GitLab (OAuth).
+   */
   gitlab: GitlabSettings;
   /** Long random value used to encrypt stored GitLab tokens. */
   secret: string;
@@ -28,7 +32,11 @@ export interface GitlabSettings {
 }
 
 export function gitlabEnabled(config: Pick<Config, 'gitlab' | 'secret'>): boolean {
-  return !!(config.gitlab.url && config.gitlab.clientId && config.gitlab.clientSecret && config.secret.length >= 16);
+  return !!(config.gitlab.url && config.secret.length >= 16);
+}
+
+export function gitlabOAuthEnabled(config: Pick<Config, 'gitlab' | 'secret'>): boolean {
+  return gitlabEnabled(config) && !!(config.gitlab.clientId && config.gitlab.clientSecret);
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {

@@ -201,10 +201,11 @@ export async function readyFields(s: TestServer, teamId: string, token: string) 
 export const REMOTE_MOCK_GITLAB_PORT = 4010;
 
 /** Starts a mock GitLab and a Sprintwell server configured to use it. */
-export async function startWithGitlab(): Promise<{ s: TestServer; gitlab: MockGitlab }> {
+export async function startWithGitlab(opts: { oauth?: boolean } = {}): Promise<{ s: TestServer; gitlab: MockGitlab }> {
   const remote = !!process.env.SPRINTWELL_TEST_URL;
   const gitlab = await startMockGitlab(remote ? REMOTE_MOCK_GITLAB_PORT : 0);
-  const s = await startServer({ gitlab: { url: gitlab.url, clientId: gitlab.clientId, clientSecret: gitlab.clientSecret }, secret: 'test-secret-that-is-long-enough' });
+  const oauth = opts.oauth ?? true;
+  const s = await startServer({ gitlab: { url: gitlab.url, clientId: oauth ? gitlab.clientId : '', clientSecret: oauth ? gitlab.clientSecret : '' }, secret: 'test-secret-that-is-long-enough' });
   const stop = s.stop;
   s.stop = async () => {
     await stop();
@@ -221,4 +222,10 @@ export async function gitlabSignIn(s: TestServer, gitlab: MockGitlab, user: { id
   const r = await fetch(start.body.url as string, { redirect: 'manual' });
   const back = new URL(r.headers.get('location') ?? '');
   return s.api('POST', '/api/auth/gitlab/callback', token, { code: back.searchParams.get('code'), state: back.searchParams.get('state'), nonce: start.body.nonce });
+}
+
+/** Verifies a GitLab account with a personal access token, as the profile page does. */
+export async function gitlabTokenVerify(s: TestServer, gitlab: MockGitlab, user: { id: number; username: string; name: string }, token: string | null) {
+  const pat = gitlab.createToken({ user, scopes: ['read_user'] });
+  return s.api('POST', '/api/auth/gitlab/token', token, { token: pat });
 }

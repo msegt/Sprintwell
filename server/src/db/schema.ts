@@ -138,6 +138,8 @@ export interface MeetingsTable {
 
 export interface GitlabAccountsTable {
   user_id: string;
+  /** 'oauth', 'token' (proved with a personal access token) or 'staff' (set by teaching staff). */
+  source: string;
   gitlab_id: string;
   username: string;
   name: string;
@@ -206,6 +208,13 @@ export interface TeamGitlabTable {
   /** 'weight', 'label' or 'unknown': where estimates go in this GitLab. */
   estimate_field: string;
   issues_after: string | null;
+  /** Project access token, encrypted. */
+  token: string | null;
+  token_scopes: string | null;
+  token_expires_at: string | null;
+  /** Webhook secret, encrypted. */
+  webhook_secret: string | null;
+  webhook_at: string | null;
 }
 
 export interface Database {

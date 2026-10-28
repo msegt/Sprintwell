@@ -18,7 +18,7 @@ const glUser = (name: string) => ({ id: nextId++, username: name.toLowerCase(), 
 describe('Sign in with GitLab', () => {
   it('is advertised in the public config', async () => {
     const cfg = await s.api('GET', '/api/config');
-    expect(cfg.body.gitlab).toEqual({ enabled: true, url: gitlab.url });
+    expect(cfg.body.gitlab).toEqual({ enabled: true, url: gitlab.url, oauth: true });
   });
 
   it('upgrades a link-and-name profile, keeping its teams, and shows the verified username to the team', async () => {
@@ -120,5 +120,18 @@ describe('Sign in with GitLab', () => {
     const token = await auth.accessToken(p.id, s.base, true);
     expect(gitlab.state.refreshes).toBe(before + 1);
     expect(gitlab.state.tokens.has(token)).toBe(true);
+  });
+
+  it('links and syncs a project with a member’s own GitLab access when no project token is given', async () => {
+    const p = await person(s, 'Owner');
+    const me = glUser('Owner');
+    await gitlabSignIn(s, gitlab, me, p.token, 'grant');
+    const pid = Math.floor(Math.random() * 1e9);
+    const project = gitlab.addProject({ id: pid, path_with_namespace: `cmt651/oauth-${pid}`, members: [me.id] });
+    project.issues.push({ id: pid, iid: 1, title: 'From OAuth', description: null, state: 'opened', labels: [], weight: null, milestone: null, web_url: `${project.web_url}/-/issues/1`, updated_at: new Date().toISOString() });
+    const { teamId } = (await s.api('POST', '/api/teams', p.token, { name: 'OAuth team' })).body;
+    const linked = await s.api('POST', `/api/teams/${teamId}/gitlab`, p.token, { project: project.web_url });
+    expect(linked.body.access).toBe('personal');
+    expect((await s.api('POST', `/api/teams/${teamId}/gitlab/sync`, p.token)).body.issuesCreated).toBe(1);
   });
 });

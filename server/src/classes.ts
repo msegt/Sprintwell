@@ -1,6 +1,6 @@
 import { DEFAULT_CLASS_SETTINGS, type ClassDTO, type ClassRole, type ClassSettings, type ClassSummaryDTO, type MemberDTO } from '@sprintwell/shared';
 import { activityCounts } from './activity';
-import type { Repo } from './repo';
+import { verifiedOf, type Repo } from './repo';
 import { HttpError, badRequest, forbidden, newId, newInviteCode, notFound, now, parseJson } from './util';
 
 const MAX_TEAMS_PER_CLASS = 60;
@@ -67,13 +67,13 @@ export class Classes {
         .selectFrom('memberships as m')
         .innerJoin('users as u', 'u.id', 'm.user_id')
         .leftJoin('gitlab_accounts as g', 'g.user_id', 'u.id')
-        .select(['m.team_id', 'u.id', 'u.display_name', 'm.role', 'm.joined_at', 'g.username'])
+        .select(['m.team_id', 'u.id', 'u.display_name', 'm.role', 'm.joined_at', 'g.username', 'g.source'])
         .where('m.team_id', 'in', ids.slice(i, i + 50))
         .orderBy('m.joined_at')
         .execute();
       for (const r of rows) {
         const list = members.get(r.team_id) ?? [];
-        list.push({ userId: r.id, displayName: r.display_name, role: r.role as MemberDTO['role'], joinedAt: r.joined_at, gitlabUsername: r.username ?? null });
+        list.push({ userId: r.id, displayName: r.display_name, role: r.role as MemberDTO['role'], joinedAt: r.joined_at, gitlabUsername: r.username ?? null, gitlabVerified: verifiedOf(r.source) });
         members.set(r.team_id, list);
       }
     }
@@ -161,6 +161,37 @@ export class Classes {
     await this.db.updateTable('teams').set({ class_id: null }).where('class_id', '=', classId).execute();
     await this.db.deleteFrom('classes').where('id', '=', classId).execute();
     return deleted;
+  }
+
+  /** Throws unless the person is a member of one of the class's teams. */
+  async requireStudent(classId: string, userId: string): Promise<string> {
+    const row = await this.db
+      .selectFrom('memberships as m')
+      .innerJoin('teams as t', 't.id', 'm.team_id')
+      .select('t.id')
+      .where('t.class_id', '=', classId)
+      .where('m.user_id', '=', userId)
+      .executeTakeFirst();
+    if (!row) throw notFound('That person is not in a team in this class.');
+    return row.id;
+  }
+
+  /** A project access token that can look up GitLab users: the student's team's, or any team's in the class. */
+  async lookupToken(classId: string, userId: string, open: (sealed: string | null) => string | null): Promise<string> {
+    const teamId = await this.requireStudent(classId, userId);
+    const rows = await this.db
+      .selectFrom('team_gitlab as g')
+      .innerJoin('teams as t', 't.id', 'g.team_id')
+      .select(['g.team_id', 'g.token'])
+      .where('t.class_id', '=', classId)
+      .where('g.token', 'is not', null)
+      .execute();
+    rows.sort((a, b) => (a.team_id === teamId ? -1 : b.team_id === teamId ? 1 : 0));
+    for (const r of rows) {
+      const t = open(r.token);
+      if (t) return t;
+    }
+    throw new HttpError(409, 'Sprintwell needs a GitLab project linked to a team in this class (with its access token) to look up usernames.');
   }
 
   /** Staff of the class a team belongs to (for notifications and checks). */

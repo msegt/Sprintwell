@@ -1,13 +1,13 @@
 import type { MeetingView } from '@sprintwell/shared';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { gitlabSignIn, person, sleep, startWithGitlab, WsClient, type TestServer } from './helpers';
+import { gitlabTokenVerify, person, sleep, startWithGitlab, WsClient, type TestServer } from './helpers';
 import type { MockGitlab } from './mock-gitlab';
 
 let s: TestServer;
 let gitlab: MockGitlab;
 const clients: WsClient[] = [];
 beforeAll(async () => {
-  ({ s, gitlab } = await startWithGitlab());
+  ({ s, gitlab } = await startWithGitlab({ oauth: false }));
 });
 afterEach(() => {
   for (const c of clients.splice(0)) c.close();
@@ -21,7 +21,7 @@ let nextGitlabId = Math.floor(Math.random() * 1e9);
 async function student(name: string) {
   const p = await person(s, name);
   const username = `${name.toLowerCase()}${nextGitlabId}`;
-  await gitlabSignIn(s, gitlab, { id: nextGitlabId++, username, name }, p.token);
+  await gitlabTokenVerify(s, gitlab, { id: nextGitlabId++, username, name }, p.token);
   return { ...p, username };
 }
 
@@ -88,7 +88,7 @@ describe('classes', () => {
     expect((await s.api('DELETE', `/api/teams/${teamIds[0]}`, colleague.token)).status).toBe(403);
     const disconnect = await s.api('DELETE', '/api/me/gitlab', ada.token);
     expect(disconnect.status).toBe(400);
-    expect(disconnect.body.error).toMatch(/stay signed in with GitLab/);
+    expect(disconnect.body.error).toMatch(/GitLab account to stay linked/);
     expect((await s.api('DELETE', `/api/teams/${teamIds[0]}`, teacher.token)).status).toBe(200);
   });
 

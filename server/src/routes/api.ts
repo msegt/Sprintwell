@@ -21,7 +21,9 @@ import {
   createClassBody,
   deviceLinkRedeemBody,
   joinStaffBody,
+  gitlabTokenBody,
   linkGitlabBody,
+  staffGitlabBody,
   updateClassBody,
   gitlabCallbackBody,
   gitlabStartBody,
@@ -119,7 +121,7 @@ export function registerApi(app: ApiRouter, deps: Deps): void {
     version: config.version,
     donationUrl: config.donationUrl,
     sourceUrl: config.sourceUrl,
-    gitlab: { enabled: gitlab.enabled, url: gitlab.enabled ? config.gitlab.url : '' },
+    gitlab: { enabled: gitlab.enabled, url: gitlab.enabled ? config.gitlab.url : '', oauth: gitlab.oauth },
   }));
 
   // ------------------------------------------------------------ GitLab sign-in
@@ -140,6 +142,16 @@ export function registerApi(app: ApiRouter, deps: Deps): void {
     return result;
   });
 
+  // Verifying a GitLab account with a personal access token (no OAuth application needed).
+  app.post('/api/auth/gitlab/token', strictLimit, async (req) => {
+    const { token } = parse(gitlabTokenBody, req.body);
+    const bearerToken = bearer(req);
+    const current = bearerToken ? await repo.userForToken(bearerToken) : null;
+    const result = await gitlab.verifyToken({ token, currentUserId: current?.id ?? null });
+    for (const t of await repo.teamsForUser(result.user.id)) changed(t.id);
+    return result;
+  });
+
   app.delete('/api/me/gitlab', async (req) => {
     const u = await user(req);
     const requiring = await repo.db
@@ -150,7 +162,7 @@ export function registerApi(app: ApiRouter, deps: Deps): void {
       .where('m.user_id', '=', u.id)
       .execute();
     const blocking = requiring.find((c) => (JSON.parse(c.settings) as { requireGitlab?: boolean }).requireGitlab !== false);
-    if (blocking) throw badRequest(`${blocking.name} needs you to stay signed in with GitLab while you are in one of its teams.`);
+    if (blocking) throw badRequest(`${blocking.name} needs your GitLab account to stay linked while you are in one of its teams.`);
     await gitlab.disconnect(u.id);
     for (const t of await repo.teamsForUser(u.id)) changed(t.id);
     return { ok: true };
@@ -424,7 +436,8 @@ export function registerApi(app: ApiRouter, deps: Deps): void {
     changed(teamId!);
     // Estimates go back to the linked GitLab issue straight away (best effort; Sync retries).
     let gitlabError: string | undefined;
-    if (patch.estimate !== undefined && story.gitlabIid !== null && u.gitlab?.canUseApi) {
+    const glLink = patch.estimate !== undefined && story.gitlabIid !== null ? await gitlabSync.status(teamId!) : null;
+    if (glLink && (glLink.access === 'project-token' || u.gitlab?.canUseApi)) {
       await gitlabSync.pushEstimate(teamId!, story.id, u.id).catch((e: Error) => (gitlabError = e.message));
     }
     return { ...story, ...(gitlabError && { gitlabError }) };
@@ -554,7 +567,7 @@ export function registerApi(app: ApiRouter, deps: Deps): void {
     const { teamId } = req.params as Params;
     const { user: u } = await member(req, teamId!);
     const body = parse(linkGitlabBody, req.body);
-    const status = await gitlabSync.link(teamId!, u.id, body.project, req.origin);
+    const status = await gitlabSync.link(teamId!, u.id, body.project, req.origin, body.token);
     await log(teamId!, u.id, 'team', `linked the GitLab project ${status.path}`);
     changed(teamId!);
     return status;
@@ -567,6 +580,20 @@ export function registerApi(app: ApiRouter, deps: Deps): void {
     await log(teamId!, u.id, 'team', 'unlinked the GitLab project');
     changed(teamId!);
     return { ok: true };
+  });
+
+  app.get('/api/teams/:teamId/gitlab/webhook', async (req) => {
+    const { teamId } = req.params as Params;
+    await member(req, teamId!, 'read');
+    return gitlabSync.webhook(teamId!, req.origin);
+  });
+
+  // Called by GitLab. Authenticated by the webhook's secret token, not a session.
+  app.post('/api/gitlab/hooks/:teamId', async (req) => {
+    const { teamId } = req.params as Params;
+    const result = await gitlabSync.onWebhook(teamId!, req.headers['x-gitlab-token'], req.body);
+    if (result.events || result.issues) changed(teamId!);
+    return { ok: true, ...result };
   });
 
   app.post('/api/teams/:teamId/gitlab/sync', async (req) => {
@@ -665,6 +692,28 @@ export function registerApi(app: ApiRouter, deps: Deps): void {
     const { classId, userId } = req.params as Params;
     await classes.removeStaff(classId!, u.id, userId!);
     for (const t of await classTeamIds(classId!)) realtime.revoke(t, userId!);
+    return { ok: true };
+  });
+
+  /** Teaching staff link a student to their GitLab username (when the student has not verified it themselves). */
+  app.post('/api/classes/:classId/members/:userId/gitlab', async (req) => {
+    const u = await user(req);
+    const { classId, userId } = req.params as Params;
+    await classes.requireStaff(classId!, u.id);
+    const { username } = parse(staffGitlabBody, req.body);
+    const lookupToken = await classes.lookupToken(classId!, userId!, (sealed) => gitlab.open(sealed));
+    await gitlab.assignByStaff({ userId: userId!, username, lookupToken });
+    for (const t of await classTeamIds(classId!)) changed(t);
+    return { ok: true };
+  });
+
+  app.delete('/api/classes/:classId/members/:userId/gitlab', async (req) => {
+    const u = await user(req);
+    const { classId, userId } = req.params as Params;
+    await classes.requireStaff(classId!, u.id);
+    await classes.requireStudent(classId!, userId!);
+    await gitlab.clearStaffAssignment(userId!);
+    for (const t of await classTeamIds(classId!)) changed(t);
     return { ok: true };
   });
 

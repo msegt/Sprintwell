@@ -129,8 +129,16 @@ export function ClassPage() {
                       {t.members.map((m) => (
                         <li key={m.userId}>
                           {m.displayName}
-                          {m.gitlabUsername ? <span className="muted small"> @{m.gitlabUsername}</span> : <Badge tone="warn">No GitLab</Badge>}
+                          {m.gitlabUsername ? (
+                            <span className="muted small">
+                              {' '}
+                              @{m.gitlabUsername} {m.gitlabVerified === 'staff' ? '(set by staff)' : '(verified)'}
+                            </span>
+                          ) : (
+                            <Badge tone="warn">No GitLab</Badge>
+                          )}
                           {m.role === 'admin' && <Badge tone="info">Admin</Badge>}
+                          {m.gitlabVerified !== 'self' && <StaffGitlabLink classId={classId} userId={m.userId} name={m.displayName} current={m.gitlabUsername} onDone={load} />}
                         </li>
                       ))}
                     </ul>
@@ -255,7 +263,7 @@ function ClassSettingsForm({ cls, onSaved }: { cls: ClassDTO; onSaved(): void })
       <label className="check">
         <input type="checkbox" checked={requireGitlab} onChange={(e) => setRequireGitlab(e.target.checked)} />
         <span>
-          <strong>Students must sign in with GitLab to join a team</strong>
+          <strong>Students must verify their GitLab account to join a team</strong>
           <span className="hint block">Recommended if you use the activity log as evidence: it ties each action to a GitLab account rather than a typed name. Only affects people joining from now on.</span>
         </span>
       </label>
@@ -324,5 +332,57 @@ export function StaffJoinPage() {
         </div>
       </form>
     </div>
+  );
+}
+
+/** Teaching staff set or clear a student's GitLab username (until the student verifies it themselves). */
+function StaffGitlabLink({ classId, userId, name, current, onDone }: { classId: string; userId: string; name: string; current: string | null; onDone(): void }) {
+  const [open, setOpen] = useState(false);
+  const [username, setUsername] = useState(current ?? '');
+  const run = useAction();
+  if (!open) {
+    return (
+      <button type="button" className="link-btn small" onClick={() => setOpen(true)}>
+        {current ? 'Change' : 'Set GitLab username'}
+        <span className="sr-only"> for {name}</span>
+      </button>
+    );
+  }
+  return (
+    <form
+      className="inline-form"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        if (await run(() => api('POST', `/api/classes/${classId}/members/${userId}/gitlab`, { username: username.trim() }), `GitLab username set for ${name}`)) {
+          setOpen(false);
+          onDone();
+        }
+      }}
+    >
+      <label className="sr-only" htmlFor={`gl-${userId}`}>
+        GitLab username for {name}
+      </label>
+      <input id={`gl-${userId}`} className="input input-small" required value={username} onChange={(e) => setUsername(e.target.value)} placeholder="username" />
+      <Button small type="submit">
+        Save
+      </Button>
+      {current && (
+        <Button
+          small
+          variant="ghost"
+          onClick={async () => {
+            if (await run(() => api('DELETE', `/api/classes/${classId}/members/${userId}/gitlab`))) {
+              setOpen(false);
+              onDone();
+            }
+          }}
+        >
+          Remove
+        </Button>
+      )}
+      <Button small variant="ghost" onClick={() => setOpen(false)}>
+        Cancel
+      </Button>
+    </form>
   );
 }

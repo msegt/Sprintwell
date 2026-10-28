@@ -25,7 +25,7 @@
     "check": "npm run typecheck && npm test && npm run build",
     "dev:cf": "npm run build -w web && npm run dev -w worker",
     "deploy:cf": "npm run build -w web && npm run deploy -w worker",
-    "test:cf": "SPRINTWELL_TEST_URL=http://127.0.0.1:8787 npm test -w server -- test/api.test.ts test/meetings.test.ts test/gitlab-auth.test.ts test/classes.test.ts test/gitlab-sync.test.ts"
+    "test:cf": "SPRINTWELL_TEST_URL=http://127.0.0.1:8787 npm test -w server -- test/api.test.ts test/meetings.test.ts test/classes.test.ts test/gitlab-sync.test.ts test/gitlab-tokens.test.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",

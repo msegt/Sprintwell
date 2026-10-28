@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { gitlabAs, person, seriousViolations } from './helpers';
+import { mockToken, person, seriousViolations } from './helpers';
 
 test('a teacher creates class teams, students join with GitLab, and the teacher sees their activity', async ({ browser }) => {
   test.setTimeout(90_000);
@@ -23,11 +23,10 @@ test('a teacher creates class teams, students join with GitLab, and the teacher 
 
   const ada = await person(browser);
   const gid = Math.floor(Math.random() * 1e9);
-  await gitlabAs({ id: gid, username: `c${gid}`, name: 'Ada Lovelace' });
   await ada.goto(invite);
   await expect(ada.getByText('asks everyone to')).toBeVisible();
-  await ada.getByRole('button', { name: 'Sign in with GitLab' }).first().click();
-  await ada.waitForURL(/\/join\//);
+  await ada.getByLabel('GitLab access token').fill(await mockToken({ user: { id: gid, username: `c${gid}`, name: 'Ada Lovelace' }, scopes: ['read_user'] }));
+  await ada.getByRole('button', { name: 'Verify and continue' }).click();
   await ada.getByRole('button', { name: 'Join team' }).click();
   await ada.waitForURL(/\/t\/[a-z0-9]+$/);
   await ada.goto(`${ada.url()}/backlog`);
