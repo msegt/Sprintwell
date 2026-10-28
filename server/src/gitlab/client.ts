@@ -67,4 +67,6 @@ export interface GitlabUser {
   username: string;
   name: string;
   web_url?: string;
+  /** True for project and group bot users (behind project access tokens). */
+  bot?: boolean;
 }

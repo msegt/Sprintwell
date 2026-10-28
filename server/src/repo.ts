@@ -36,16 +36,22 @@ import type {
   StoriesTable,
   UsersTable,
 } from './db/schema';
+import { toStatus } from './gitlab/status';
 import { HttpError, badRequest, forbidden, hashToken, newDeviceCode, newId, newInviteCode, newToken, notFound, now, parseJson } from './util';
 
 export const FORMER_MEMBER = 'Former member';
 
-export function toUser(row: Selectable<UsersTable>, gitlab: { username: string; name: string; scopes: string } | null = null): UserDTO {
+export function verifiedOf(source: string | null | undefined): 'self' | 'staff' | null {
+  if (!source) return null;
+  return source === 'staff' ? 'staff' : 'self';
+}
+
+export function toUser(row: Selectable<UsersTable>, gitlab: { username: string; name: string; scopes: string; source: string } | null = null): UserDTO {
   return {
     id: row.id,
     displayName: row.display_name,
     hasEmail: !!row.email,
-    gitlab: gitlab ? { username: gitlab.username, name: gitlab.name, canUseApi: gitlab.scopes.split(/\s+/).includes('api') } : null,
+    gitlab: gitlab ? { username: gitlab.username, name: gitlab.name, source: gitlab.source as 'oauth' | 'token' | 'staff', canUseApi: gitlab.scopes.split(/\s+/).includes('api') } : null,
   };
 }
 
@@ -199,7 +205,7 @@ export class Repo {
       .selectFrom('sessions')
       .innerJoin('users', 'users.id', 'sessions.user_id')
       .leftJoin('gitlab_accounts as g', 'g.user_id', 'users.id')
-      .select(['users.id', 'users.display_name', 'users.email', 'users.created_at', 'users.deleted_at', 'sessions.id as session_id', 'sessions.last_seen_at', 'g.username', 'g.name', 'g.scopes'])
+      .select(['users.id', 'users.display_name', 'users.email', 'users.created_at', 'users.deleted_at', 'sessions.id as session_id', 'sessions.last_seen_at', 'g.username', 'g.name', 'g.scopes', 'g.source'])
       .where('sessions.token_hash', '=', hashToken(token))
       .executeTakeFirst();
     if (!row || row.deleted_at) return null;
@@ -207,18 +213,18 @@ export class Repo {
     if (Date.now() - Date.parse(row.last_seen_at) > 3_600_000) {
       await this.db.updateTable('sessions').set({ last_seen_at: now() }).where('id', '=', row.session_id).execute();
     }
-    return toUser(row, row.username ? { username: row.username, name: row.name ?? row.username, scopes: row.scopes ?? '' } : null);
+    return toUser(row, row.username ? { username: row.username, name: row.name ?? row.username, scopes: row.scopes ?? '', source: row.source ?? 'oauth' } : null);
   }
 
   async userById(userId: string): Promise<UserDTO | null> {
     const row = await this.db
       .selectFrom('users')
       .leftJoin('gitlab_accounts as g', 'g.user_id', 'users.id')
-      .select(['users.id', 'users.display_name', 'users.email', 'users.created_at', 'users.deleted_at', 'g.username', 'g.name', 'g.scopes'])
+      .select(['users.id', 'users.display_name', 'users.email', 'users.created_at', 'users.deleted_at', 'g.username', 'g.name', 'g.scopes', 'g.source'])
       .where('users.id', '=', userId)
       .executeTakeFirst();
     if (!row || row.deleted_at) return null;
-    return toUser(row, row.username ? { username: row.username, name: row.name ?? row.username, scopes: row.scopes ?? '' } : null);
+    return toUser(row, row.username ? { username: row.username, name: row.name ?? row.username, scopes: row.scopes ?? '', source: row.source ?? 'oauth' } : null);
   }
 
   async deleteSession(token: string): Promise<void> {
@@ -351,7 +357,7 @@ export class Repo {
       if (cls) {
         if (cls.settings.requireGitlab) {
           const linked = await this.db.selectFrom('gitlab_accounts').select('user_id').where('user_id', '=', userId).executeTakeFirst();
-          if (!linked) throw new HttpError(403, `${cls.name} asks everyone to sign in with GitLab before joining a team.`, { code: 'gitlab_required' });
+          if (!linked) throw new HttpError(403, `${cls.name} asks everyone to verify their GitLab account before joining a team (on your profile, or on the invite page).`, { code: 'gitlab_required' });
         }
         const other = await this.db
           .selectFrom('memberships as m')
@@ -429,7 +435,7 @@ export class Repo {
     if (!t) throw notFound('Team not found');
     const members = await this.members(teamId);
     const cls = t.class_id ? await this.classOfTeam(teamId) : null;
-    const gl = await this.db.selectFrom('team_gitlab').select(['path', 'web_url', 'last_sync_at', 'estimate_field']).where('team_id', '=', teamId).executeTakeFirst();
+    const gl = await this.db.selectFrom('team_gitlab').selectAll().where('team_id', '=', teamId).executeTakeFirst();
     const settings = { ...DEFAULT_TEAM_SETTINGS, ...parseJson<Partial<TeamSettings>>(t.settings, {}) };
     if (cls) settings.enforceReady = true;
     return {
@@ -441,7 +447,7 @@ export class Repo {
       members,
       myRole: viewerRole,
       classInfo: cls ? { id: cls.id, name: cls.name, requireGitlab: cls.settings.requireGitlab, resources: cls.settings.resources } : null,
-      gitlab: gl ? { path: gl.path, webUrl: gl.web_url, lastSyncAt: gl.last_sync_at, estimateField: gl.estimate_field as 'weight' | 'label' | 'unknown' } : null,
+      gitlab: gl ? toStatus(gl) : null,
     };
   }
 
@@ -450,11 +456,11 @@ export class Repo {
       .selectFrom('memberships as m')
       .innerJoin('users as u', 'u.id', 'm.user_id')
       .leftJoin('gitlab_accounts as g', 'g.user_id', 'u.id')
-      .select(['u.id', 'u.display_name', 'm.role', 'm.joined_at', 'g.username'])
+      .select(['u.id', 'u.display_name', 'm.role', 'm.joined_at', 'g.username', 'g.source'])
       .where('m.team_id', '=', teamId)
       .orderBy('m.joined_at')
       .execute();
-    return rows.map((r) => ({ userId: r.id, displayName: r.display_name, role: r.role as TeamRole, joinedAt: r.joined_at, gitlabUsername: r.username ?? null }));
+    return rows.map((r) => ({ userId: r.id, displayName: r.display_name, role: r.role as TeamRole, joinedAt: r.joined_at, gitlabUsername: r.username ?? null, gitlabVerified: verifiedOf(r.source) }));
   }
 
   /** Names for everyone who ever appeared in the team's data, including people who left. */

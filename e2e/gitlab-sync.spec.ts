@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { MOCK_GITLAB, createTeam, gitlabAs, person, seriousViolations } from './helpers';
+import { MOCK_GITLAB, createTeam, mockToken, person, seriousViolations } from './helpers';
 
 test('a team links its GitLab project, imports issues and sends estimates back', async ({ browser }) => {
   test.setTimeout(90_000);
@@ -34,15 +34,20 @@ test('a team links its GitLab project, imports issues and sends estimates back',
 
   const ada = await person(browser);
   const { teamUrl } = await createTeam(ada, 'Ada', 'Observatory team');
-  await gitlabAs(me);
+  await ada.goto('/me');
+  await ada.getByLabel('GitLab access token').fill(await mockToken({ user: me, scopes: ['read_user'] }));
+  await ada.getByRole('button', { name: 'Verify with GitLab' }).click();
+  await expect(ada.getByText(/Verified as/)).toBeVisible();
+
   await ada.goto(`${teamUrl}/settings`);
-  await ada.getByRole('button', { name: 'Sign in with GitLab' }).first().click();
-  await ada.waitForURL(/\/settings$/);
-  await ada.getByRole('button', { name: 'Allow access to GitLab' }).click();
-  await ada.waitForURL(/\/settings$/);
   await ada.getByLabel('Project address').fill(`${MOCK_GITLAB}/${path}`);
+  await ada.getByLabel('Project access token').fill(await mockToken({ projectId, scopes: ['api'], expiresAt: '2027-06-30' }));
   await ada.getByRole('button', { name: 'Link project' }).click();
   await expect(ada.getByText('Linked to')).toBeVisible();
+  await expect(ada.getByText(/expires on 30 Jun 2027/)).toBeVisible();
+  await ada.getByText('Live updates with a webhook (optional)').click();
+  await ada.getByRole('button', { name: 'Show webhook details' }).click();
+  await expect(ada.getByRole('button', { name: 'Copy secret token' })).toBeVisible();
   expect(await seriousViolations(ada), 'team page with GitLab').toEqual([]);
 
   await ada.goto(`${teamUrl}/backlog`);

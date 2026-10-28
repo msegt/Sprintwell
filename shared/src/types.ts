@@ -19,6 +19,8 @@ export interface UserDTO {
 export interface GitlabIdentity {
   username: string;
   name: string;
+  /** How it was established: Sign in with GitLab, an access token the person pasted, or set by teaching staff. */
+  source: 'oauth' | 'token' | 'staff';
   /** True once the person allowed Sprintwell to use the GitLab API on their behalf (needed for import and sync). */
   canUseApi: boolean;
 }
@@ -31,8 +33,10 @@ export interface MemberDTO {
   displayName: string;
   role: TeamRole;
   joinedAt: string;
-  /** GitLab username, when the person signed in with GitLab (verified identity). */
+  /** GitLab username linked to the person, if any. */
   gitlabUsername: string | null;
+  /** 'self' when the person proved it themselves; 'staff' when teaching staff set it. */
+  gitlabVerified: 'self' | 'staff' | null;
 }
 
 export interface TeamSettings {
@@ -83,6 +87,13 @@ export interface TeamGitlabDTO {
   lastSyncAt: string | null;
   /** Where estimates are written: the issue weight, a "points::N" label, or not known until the first write. */
   estimateField: 'weight' | 'label' | 'unknown';
+  /** 'project-token': a project access token the team added; 'personal': a member's own GitLab access (OAuth). */
+  access: 'project-token' | 'personal';
+  tokenExpiresAt: string | null;
+  /** False when the token can only read (no estimates written back). */
+  canWrite: boolean;
+  /** When GitLab last called the team's webhook, if ever. */
+  webhookAt: string | null;
 }
 
 export interface ResourceLink {

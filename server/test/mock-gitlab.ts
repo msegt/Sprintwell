@@ -47,6 +47,11 @@ export interface MockProject {
 
 export interface MockGitlab {
   url: string;
+  /**
+   * Creates a personal access token for a user, or a project access token
+   * (whose bot user becomes a project member). Returns the token string.
+   */
+  createToken(opts: { user?: MockUser; projectId?: number; scopes: string[]; expiresAt?: string | null }): string;
   /** Adds (or replaces) a project; returns it so tests can change issues and events. */
   addProject(p: Partial<MockProject> & { id: number; path_with_namespace: string }): MockProject;
   clientId: string;
@@ -59,7 +64,7 @@ export interface MockGitlab {
 
 export interface MockState {
   users: Map<number, MockUser>;
-  tokens: Map<string, { user: MockUser; scope: string; expires: number }>;
+  tokens: Map<string, { user: MockUser; scope: string; expires: number; pat?: { id: number; name: string; expires_at: string | null } }>;
   refresh: Map<string, { user: MockUser; scope: string }>;
   /** Extra routes registered by tests (e.g. projects and issues for sync). */
   routes: ((req: IncomingMessage, url: URL, body: string, user: MockUser | null, res: ServerResponse) => boolean)[];
@@ -101,6 +106,24 @@ export async function startMockGitlab(port = 0): Promise<MockGitlab> {
     res.end(JSON.stringify(slice));
   };
 
+  let nextBot = 900_000;
+  let nextPat = 1;
+  const createToken = (opts: { user?: MockUser; projectId?: number; scopes: string[]; expiresAt?: string | null }): string => {
+    let user = opts.user;
+    if (opts.projectId !== undefined) {
+      const project = state.projects.get(opts.projectId);
+      if (!project) throw new Error('no such project');
+      const id = nextBot++;
+      user = { id, username: `project_${project.id}_bot_${id}`, name: 'Sprintwell', bot: true } as MockUser;
+      project.members.push(id);
+    }
+    if (!user) throw new Error('user or projectId required');
+    state.users.set(user.id, user);
+    const token = `glpat-${randomBytes(12).toString('hex')}`;
+    state.tokens.set(token, { user, scope: opts.scopes.join(' '), expires: Date.now() + 365 * 86_400_000, pat: { id: nextPat++, name: 'Sprintwell', expires_at: opts.expiresAt ?? null } });
+    return token;
+  };
+
   const issue = (user: MockUser, scope: string) => {
     const access = randomBytes(16).toString('hex');
     const refresh = randomBytes(16).toString('hex');
@@ -116,6 +139,7 @@ export async function startMockGitlab(port = 0): Promise<MockGitlab> {
 
     if (url.pathname === '/__mock/health') return json(res, 200, { ok: true });
     if (url.pathname === '/__mock/project' && req.method === 'POST') return json(res, 200, addProject(JSON.parse(body)));
+    if (url.pathname === '/__mock/token' && req.method === 'POST') return json(res, 200, { token: createToken(JSON.parse(body)) });
     if (url.pathname.startsWith('/__mock/project/') && req.method === 'GET') return json(res, 200, state.projects.get(Number(url.pathname.split('/').pop())) ?? null);
     if (url.pathname === '/__mock/login' && req.method === 'POST') {
       const u = JSON.parse(body) as MockUser;
@@ -162,12 +186,26 @@ export async function startMockGitlab(port = 0): Promise<MockGitlab> {
 
     let user: MockUser | null = null;
     const auth = req.headers.authorization ?? '';
-    if (auth.startsWith('Bearer ')) {
-      const t = state.tokens.get(auth.slice(7));
-      if (t && t.expires > Date.now()) user = t.user;
-    }
+    const presented = auth.startsWith('Bearer ') ? auth.slice(7) : String(req.headers['private-token'] ?? '');
+    const tokenInfo = presented ? state.tokens.get(presented) : undefined;
+    if (tokenInfo && tokenInfo.expires > Date.now()) user = tokenInfo.user;
     if (url.pathname.startsWith('/api/v4/') && !user) return json(res, 401, { message: '401 Unauthorized' });
     if (url.pathname === '/api/v4/user') return json(res, 200, { ...user, web_url: `http://gitlab.test/${user!.username}` });
+    if (url.pathname === '/api/v4/personal_access_tokens/self') {
+      if (!tokenInfo?.pat) return json(res, 404, { message: '404 Not found' });
+      if (req.method === 'DELETE') {
+        state.tokens.delete(presented);
+        res.writeHead(204);
+        return res.end();
+      }
+      return json(res, 200, { id: tokenInfo.pat.id, name: tokenInfo.pat.name, scopes: tokenInfo.scope.split(' '), active: true, revoked: false, expires_at: tokenInfo.pat.expires_at, user_id: tokenInfo.user.id });
+    }
+    if (url.pathname === '/api/v4/users') {
+      const wanted = (url.searchParams.get('username') ?? '').toLowerCase();
+      return json(res, 200, [...state.users.values()].filter((u) => u.username.toLowerCase() === wanted).map((u) => ({ id: u.id, username: u.username, name: u.name })));
+    }
+    // Write calls need the api scope, as in GitLab.
+    if (req.method !== 'GET' && tokenInfo && !tokenInfo.scope.split(' ').includes('api')) return json(res, 403, { error: 'insufficient_scope' });
 
     if (url.pathname.startsWith('/api/v4/')) state.calls.push(`${req.method} ${url.pathname}`);
     const m = /^\/api\/v4\/projects\/([^/]+)(\/.*)?$/.exec(url.pathname);
@@ -215,6 +253,7 @@ export async function startMockGitlab(port = 0): Promise<MockGitlab> {
   return {
     url,
     addProject,
+    createToken,
     clientId,
     clientSecret,
     login(u) {

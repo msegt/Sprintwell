@@ -76,7 +76,7 @@ export function PrivacyPage() {
       <ul>
         <li>The display name you choose. No email address or password is needed.</li>
         <li>
-          If you sign in with GitLab: your GitLab user id, username and name, and the access tokens GitLab issues, stored encrypted. Disconnect GitLab from your profile at any time.
+          If you link GitLab: your GitLab user id, username and name. A personal access token you paste to verify is used once and not stored. If you use Sign in with GitLab, the tokens GitLab issues are stored encrypted. A team’s project access token is stored encrypted. Disconnect GitLab from your profile at any time.
         </li>
         <li>An activity log of what each person does in a team (for example “wrote a story”, “took part in the Daily Scrum”), with the time.</li>
         <li>A random sign-in token kept in your browser; the server stores only a one-way hash of it.</li>

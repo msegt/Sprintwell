@@ -2,6 +2,8 @@ import { LIMITS } from '@sprintwell/shared';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { GitlabButton } from '../components/GitlabButton';
+import { GitlabVerify } from '../components/GitlabVerify';
+import { usePublicConfig } from '../lib/config';
 import { CreateClass, useMyClasses } from './Classes';
 import { Button, Field, Icon } from '../components/ui';
 import { api, setToken } from '../lib/api';
@@ -170,6 +172,7 @@ export function HomePage() {
             </ul>
           </section>
           <DeviceSignIn />
+          <GitlabSignInCard />
         </>
       )}
     </div>
@@ -258,5 +261,20 @@ function DeviceSignIn() {
         <Button type="submit">Sign in</Button>
       </div>
     </form>
+  );
+}
+
+/** Signing in with a GitLab access token: for people whose profile is linked to GitLab. */
+function GitlabSignInCard() {
+  const config = usePublicConfig();
+  if (!config?.gitlab.enabled) return null;
+  return (
+    <section className="card subtle" aria-labelledby="gitlab-signin-h">
+      <h2 id="gitlab-signin-h">Linked your profile to GitLab?</h2>
+      <details>
+        <summary>Sign in with a GitLab access token</summary>
+        <GitlabVerify submitLabel="Sign in" intro={<p className="small muted">This finds the Sprintwell profile linked to your GitLab account, or creates one.</p>} />
+      </details>
+    </section>
   );
 }

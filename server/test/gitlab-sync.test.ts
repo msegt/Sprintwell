@@ -1,13 +1,14 @@
 import type { StoryDTO } from '@sprintwell/shared';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { gitlabSignIn, person, sleep, startWithGitlab, WsClient, type TestServer } from './helpers';
+import { gitlabTokenVerify, person, sleep, startWithGitlab, WsClient, type TestServer } from './helpers';
 import type { MockGitlab, MockIssue } from './mock-gitlab';
 
 let s: TestServer;
 let gitlab: MockGitlab;
 const clients: WsClient[] = [];
 beforeAll(async () => {
-  ({ s, gitlab } = await startWithGitlab());
+  // As at Cardiff: no OAuth application, only access tokens and webhooks.
+  ({ s, gitlab } = await startWithGitlab({ oauth: false }));
 });
 afterEach(() => {
   for (const c of clients.splice(0)) c.close();
@@ -20,15 +21,15 @@ afterAll(async () => {
 let seq = Math.floor(Math.random() * 1e6);
 const at = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
 
-/** A team of two GitLab-verified people who allowed API access, plus a GitLab project. */
-async function setup(opts: { weights?: boolean } = {}) {
+/** A team of two GitLab-verified people and a GitLab project, linked with a project access token. */
+async function setup(opts: { weights?: boolean; link?: boolean; scopes?: string[] } = {}) {
   const n = seq++;
   const adaGl = { id: n * 10, username: `ada${n}`, name: 'Ada' };
   const graceGl = { id: n * 10 + 1, username: `grace${n}`, name: 'Grace' };
   const ada = await person(s, 'Ada');
-  await gitlabSignIn(s, gitlab, adaGl, ada.token, 'grant');
+  await gitlabTokenVerify(s, gitlab, adaGl, ada.token);
   const grace = await person(s, 'Grace');
-  await gitlabSignIn(s, gitlab, graceGl, grace.token, 'grant');
+  await gitlabTokenVerify(s, gitlab, graceGl, grace.token);
   const { teamId } = (await s.api('POST', '/api/teams', ada.token, { name: `Sync team ${n}` })).body;
   const code = (await s.api('GET', `/api/teams/${teamId}`, ada.token)).body.team.inviteCode;
   await s.api('POST', '/api/teams/join', grace.token, { code });
@@ -61,28 +62,51 @@ async function setup(opts: { weights?: boolean } = {}) {
       { id: n * 100 + 5, action_name: 'closed', target_type: 'Issue', target_iid: 9, target_title: 'Something else', author_id: 99, author: { id: 99, username: 'bob', name: 'Bob' }, created_at: at(10) },
     ],
   });
-  return { ada, grace, teamId, project, path, web };
+  const projectToken = gitlab.createToken({ projectId: project.id, scopes: opts.scopes ?? ['api'], expiresAt: '2027-06-30' });
+  if (opts.link !== false) {
+    const r = await s.api('POST', `/api/teams/${teamId}/gitlab`, ada.token, { project: web, token: projectToken });
+    if (r.status !== 200) throw new Error(r.text);
+  }
+  return { ada, grace, teamId, project, path, web, projectToken };
 }
 
 const stories = async (teamId: string, token: string): Promise<StoryDTO[]> => (await s.api('GET', `/api/teams/${teamId}`, token)).body.stories;
 
+describe('without an OAuth application', () => {
+  it('reports token-only GitLab in the config and refuses OAuth sign-in', async () => {
+    expect((await s.api('GET', '/api/config')).body.gitlab).toEqual({ enabled: true, url: gitlab.url, oauth: false });
+    expect((await s.api('POST', '/api/auth/gitlab/start', null, { purpose: 'signin' })).status).toBe(404);
+  });
+});
+
 describe('GitLab project sync', () => {
-  it('links a project only for its members', async () => {
-    const { ada, teamId, web } = await setup();
-    const outsider = await person(s, 'Mallory');
-    await gitlabSignIn(s, gitlab, { id: Math.floor(Math.random() * 1e9), username: 'mallory', name: 'Mallory' }, outsider.token, 'grant');
-    const { teamId: other } = (await s.api('POST', '/api/teams', outsider.token, { name: 'Other' })).body;
-    expect((await s.api('POST', `/api/teams/${other}/gitlab`, outsider.token, { project: web })).status).toBe(502);
-    expect((await s.api('POST', `/api/teams/${teamId}/gitlab`, ada.token, { project: 'https://elsewhere.example/group/project' })).status).toBe(400);
-    const linked = await s.api('POST', `/api/teams/${teamId}/gitlab`, ada.token, { project: `${web}/-/boards` });
+  it('links a project with a project access token, and checks the token', async () => {
+    const { ada, teamId, web, projectToken } = await setup({ link: false });
+    const other = await setup({ link: false });
+    const tryLink = (body: object) => s.api('POST', `/api/teams/${teamId}/gitlab`, ada.token, body);
+    expect((await tryLink({ project: web })).body.error).toMatch(/project access token/);
+    expect((await tryLink({ project: web, token: 'glpat-not-a-real-token' })).body.error).toMatch(/did not accept/);
+    expect((await tryLink({ project: web, token: other.projectToken })).body.error).toMatch(/cannot see this project/);
+    expect((await tryLink({ project: 'https://elsewhere.example/group/project', token: projectToken })).status).toBe(400);
+    const linked = await tryLink({ project: `${web}/-/boards`, token: projectToken });
     expect(linked.status).toBe(200);
-    expect(linked.body.webUrl).toBe(web);
-    expect((await s.api('GET', `/api/teams/${teamId}`, ada.token)).body.team.gitlab.path).toMatch(/^cmt651\/team-/);
+    expect(linked.body).toMatchObject({ webUrl: web, access: 'project-token', canWrite: true, tokenExpiresAt: '2027-06-30' });
+    // The token never leaves the server.
+    expect(JSON.stringify((await s.api('GET', `/api/teams/${teamId}`, ada.token)).body)).not.toContain(projectToken);
+  });
+
+  it('works read-only with a read_api token', async () => {
+    const { ada, teamId } = await setup({ scopes: ['read_api'] });
+    expect((await s.api('GET', `/api/teams/${teamId}`, ada.token)).body.team.gitlab.canWrite).toBe(false);
+    await s.api('POST', `/api/teams/${teamId}/gitlab/sync`, ada.token);
+    const st = (await stories(teamId, ada.token)).find((x) => x.gitlabIid === 1)!;
+    const r = await s.api('PATCH', `/api/teams/${teamId}/stories/${st.id}`, ada.token, { estimate: '5' });
+    expect(r.status).toBe(200);
+    expect(r.body.gitlabError).toMatch(/can only read/);
   });
 
   it('imports issues and milestones, keeps the Ready gate, and logs merge requests, reviews and commits', async () => {
     const { ada, grace, teamId, web } = await setup();
-    await s.api('POST', `/api/teams/${teamId}/gitlab`, ada.token, { project: web });
     const r = await s.api('POST', `/api/teams/${teamId}/gitlab/sync`, grace.token);
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({ issuesCreated: 2, sprintsCreated: 1, partial: false });
@@ -116,7 +140,6 @@ describe('GitLab project sync', () => {
 
   it('takes newer changes from GitLab and closes finished items', async () => {
     const { ada, teamId, web, project } = await setup();
-    await s.api('POST', `/api/teams/${teamId}/gitlab`, ada.token, { project: web });
     await s.api('POST', `/api/teams/${teamId}/gitlab/sync`, ada.token);
     await sleep(5);
     const issue = project.issues.find((i) => i.iid === 2)!;
@@ -129,7 +152,6 @@ describe('GitLab project sync', () => {
 
   it('writes estimates back as the issue weight', async () => {
     const { ada, teamId, web, project } = await setup();
-    await s.api('POST', `/api/teams/${teamId}/gitlab`, ada.token, { project: web });
     await s.api('POST', `/api/teams/${teamId}/gitlab/sync`, ada.token);
     const st = (await stories(teamId, ada.token)).find((x) => x.gitlabIid === 1)!;
     const r = await s.api('PATCH', `/api/teams/${teamId}/stories/${st.id}`, ada.token, { estimate: '5' });
@@ -144,7 +166,6 @@ describe('GitLab project sync', () => {
 
   it('falls back to a points label where GitLab has no weights, replacing the old label', async () => {
     const { ada, teamId, web, project } = await setup({ weights: false });
-    await s.api('POST', `/api/teams/${teamId}/gitlab`, ada.token, { project: web });
     await s.api('POST', `/api/teams/${teamId}/gitlab/sync`, ada.token);
     const st = (await stories(teamId, ada.token)).find((x) => x.gitlabIid === 1)!;
     expect(st.estimate).toBe('3');
@@ -157,7 +178,6 @@ describe('GitLab project sync', () => {
 
   it('writes the Planning Poker result to GitLab without anyone retyping it', async () => {
     const { ada, grace, teamId, web, project } = await setup();
-    await s.api('POST', `/api/teams/${teamId}/gitlab`, ada.token, { project: web });
     await s.api('POST', `/api/teams/${teamId}/gitlab/sync`, ada.token);
     const st = (await stories(teamId, ada.token)).find((x) => x.gitlabIid === 2)!;
     const { meetingId } = (await s.api('POST', `/api/teams/${teamId}/meetings`, ada.token, { kind: 'poker', options: { storyIds: [st.id] } })).body;
@@ -181,7 +201,6 @@ describe('GitLab project sync', () => {
     for (let iid = 10; iid < 260; iid++) {
       project.issues.push({ id: project.id * 10_000 + iid, iid, title: `Bulk ${iid}`, description: null, state: 'opened', labels: [], weight: null, milestone: null, web_url: `${web}/-/issues/${iid}`, updated_at: sameTime });
     }
-    await s.api('POST', `/api/teams/${teamId}/gitlab`, ada.token, { project: web });
     const first = (await s.api('POST', `/api/teams/${teamId}/gitlab/sync`, ada.token)).body;
     expect(first.partial).toBe(true);
     let total = first.issuesCreated;
@@ -190,15 +209,17 @@ describe('GitLab project sync', () => {
     expect((await stories(teamId, ada.token)).length).toBe(252);
   });
 
-  it('needs GitLab API access from the person syncing', async () => {
-    const { ada, teamId, web } = await setup();
-    await s.api('POST', `/api/teams/${teamId}/gitlab`, ada.token, { project: web });
+  it('lets anyone in the team sync with the team’s token, and stops when the token expires', async () => {
+    const { ada, teamId, web, project } = await setup();
     const linus = await person(s, 'Linus');
-    await gitlabSignIn(s, gitlab, { id: Math.floor(Math.random() * 1e9), username: 'linus', name: 'Linus' }, linus.token);
     const code = (await s.api('GET', `/api/teams/${teamId}`, ada.token)).body.team.inviteCode;
     await s.api('POST', '/api/teams/join', linus.token, { code });
-    const r = await s.api('POST', `/api/teams/${teamId}/gitlab/sync`, linus.token);
+    expect((await s.api('POST', `/api/teams/${teamId}/gitlab/sync`, linus.token)).status).toBe(200);
+    const expired = gitlab.createToken({ projectId: project.id, scopes: ['api'], expiresAt: '2020-01-01' });
+    expect((await s.api('POST', `/api/teams/${teamId}/gitlab`, ada.token, { project: web, token: expired })).status).toBe(200);
+    const r = await s.api('POST', `/api/teams/${teamId}/gitlab/sync`, ada.token);
     expect(r.status).toBe(409);
-    expect(r.body.error).toMatch(/Allow Sprintwell to access GitLab/);
+    expect(r.body.error).toMatch(/expired/);
   });
+
 });

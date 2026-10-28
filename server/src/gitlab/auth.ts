@@ -1,5 +1,5 @@
 import { LIMITS, type UserDTO } from '@sprintwell/shared';
-import { gitlabEnabled, type Config } from '../config';
+import { gitlabEnabled, gitlabOAuthEnabled, type Config } from '../config';
 import { SecretBox, pkcePair } from '../crypto';
 import type { Repo } from '../repo';
 import { HttpError, badRequest, hashToken, newToken, now } from '../util';
@@ -32,13 +32,115 @@ export class GitlabAuth {
     this.box = gitlabEnabled(config) ? new SecretBox(config.secret) : null;
   }
 
+  /** GitLab features that need no OAuth application (tokens and webhooks). */
   get enabled(): boolean {
     return this.box !== null;
   }
 
-  private need(): SecretBox {
-    if (!this.box) throw new HttpError(404, 'GitLab sign-in is not set up on this Sprintwell server.');
+  /** Sign in with GitLab (needs an OAuth application on the GitLab server). */
+  get oauth(): boolean {
+    return this.box !== null && gitlabOAuthEnabled(this.config);
+  }
+
+  private needBox(): SecretBox {
+    if (!this.box) throw new HttpError(404, 'GitLab is not set up on this Sprintwell server.');
     return this.box;
+  }
+
+  private need(): SecretBox {
+    if (!this.oauth) throw new HttpError(404, 'Sign in with GitLab is not set up on this Sprintwell server. Verify your GitLab account with an access token instead.');
+    return this.needBox();
+  }
+
+  seal(plain: string): string {
+    return this.needBox().seal(plain);
+  }
+
+  open(sealed: string | null): string | null {
+    return sealed ? this.needBox().open(sealed) : null;
+  }
+
+  /**
+   * Verifies a GitLab account with a personal access token the person pasted,
+   * without needing an OAuth application. The token is used once to ask GitLab
+   * who it belongs to and is then revoked if GitLab allows it; it is never stored.
+   *
+   * Signing in this way links the GitLab account to the current profile when it
+   * has none yet; otherwise it signs in to the profile already linked to that
+   * GitLab account (including one teaching staff linked), so the same token
+   * works as a sign-in on another device.
+   */
+  async verifyToken(input: { token: string; currentUserId: string | null }): Promise<{ token: string | null; user: UserDTO; revoked: boolean }> {
+    this.needBox();
+    const db = this.repo.db;
+    const { data: gl } = await gitlabApi<GitlabUser>(this.config.gitlab, input.token, '/user', { what: 'check that token' }).catch((e) => {
+      if (e instanceof HttpError && (e as { upstreamStatus?: number }).upstreamStatus === 401) throw badRequest('GitLab did not accept that token. Check you copied all of it and that it has not expired.');
+      throw e;
+    });
+    if (gl.bot || /^(project|group)_\d+_bot/.test(gl.username)) throw badRequest('That is a project access token. To verify yourself, create a personal access token on your own GitLab profile.');
+    const gitlabId = String(gl.id);
+    const linked = await db.selectFrom('gitlab_accounts').select(['user_id', 'source']).where('gitlab_id', '=', gitlabId).executeTakeFirst();
+    const mine = input.currentUserId ? await db.selectFrom('gitlab_accounts').select(['gitlab_id', 'source', 'username']).where('user_id', '=', input.currentUserId).executeTakeFirst() : undefined;
+
+    let userId: string;
+    let session: string | null = null;
+    if (linked) {
+      userId = linked.user_id;
+      if (userId !== input.currentUserId) session = await this.repo.createSession(userId);
+    } else if (input.currentUserId && (!mine || mine.source === 'staff')) {
+      // Upgrade the current profile; proof from the person outranks a staff guess.
+      userId = input.currentUserId;
+    } else if (input.currentUserId && mine) {
+      throw badRequest(`This profile is already verified as @${mine.username}. Sign out first to use a different GitLab account.`);
+    } else {
+      const created = await this.repo.createUser((gl.name || gl.username).slice(0, LIMITS.displayName));
+      userId = created.user.id;
+      session = created.token;
+    }
+
+    const ts = now();
+    const values = { source: 'token', gitlab_id: gitlabId, username: gl.username, name: gl.name ?? gl.username, scopes: '', access_token: '', refresh_token: null, expires_at: null, updated_at: ts };
+    if (await db.selectFrom('gitlab_accounts').select('user_id').where('user_id', '=', userId).executeTakeFirst()) {
+      // Keep an OAuth connection's tokens if there is one; only mark the identity as proven.
+      const existing = await db.selectFrom('gitlab_accounts').select('source').where('user_id', '=', userId).executeTakeFirstOrThrow();
+      if (existing.source === 'oauth' && linked) await db.updateTable('gitlab_accounts').set({ username: gl.username, name: values.name, updated_at: ts }).where('user_id', '=', userId).execute();
+      else await db.updateTable('gitlab_accounts').set(values).where('user_id', '=', userId).execute();
+    } else {
+      await db.insertInto('gitlab_accounts').values({ ...values, user_id: userId, created_at: ts }).execute();
+    }
+
+    // Revoke the token: Sprintwell has no further use for it.
+    const revoked = await fetch(`${this.config.gitlab.url}/api/v4/personal_access_tokens/self`, { method: 'DELETE', headers: { authorization: `Bearer ${input.token}` }, signal: AbortSignal.timeout(10_000) })
+      .then((r) => r.status === 204)
+      .catch(() => false);
+    const user = await this.repo.userById(userId);
+    if (!user) throw new HttpError(404, 'Profile not found');
+    return { token: session, user, revoked };
+  }
+
+  /**
+   * Teaching staff link a student to a GitLab account by username, using a
+   * project access token that can see GitLab users. Refuses if the student, or
+   * someone else, already proved a different link.
+   */
+  async assignByStaff(input: { userId: string; username: string; lookupToken: string }): Promise<void> {
+    this.needBox();
+    const db = this.repo.db;
+    const { data } = await gitlabApi<GitlabUser[]>(this.config.gitlab, input.lookupToken, `/users?username=${encodeURIComponent(input.username.replace(/^@/, '').trim())}`, { what: 'look up that username' });
+    const gl = data[0];
+    if (!gl) throw badRequest(`GitLab has no user called @${input.username.replace(/^@/, '')}.`);
+    const mine = await db.selectFrom('gitlab_accounts').select(['source', 'username']).where('user_id', '=', input.userId).executeTakeFirst();
+    if (mine && mine.source !== 'staff') throw badRequest(`This student verified their own GitLab account (@${mine.username}); it cannot be changed by staff.`);
+    const other = await db.selectFrom('gitlab_accounts').select('user_id').where('gitlab_id', '=', String(gl.id)).executeTakeFirst();
+    if (other && other.user_id !== input.userId) throw badRequest(`@${gl.username} is already linked to another Sprintwell profile.`);
+    const ts = now();
+    const values = { source: 'staff', gitlab_id: String(gl.id), username: gl.username, name: gl.name ?? gl.username, scopes: '', access_token: '', refresh_token: null, expires_at: null, updated_at: ts };
+    if (mine) await db.updateTable('gitlab_accounts').set(values).where('user_id', '=', input.userId).execute();
+    else await db.insertInto('gitlab_accounts').values({ ...values, user_id: input.userId, created_at: ts }).execute();
+  }
+
+  async clearStaffAssignment(userId: string): Promise<void> {
+    await this.repo.db.deleteFrom('gitlab_accounts').where('user_id', '=', userId).where('source', '=', 'staff').execute();
   }
 
   redirectUri(origin: string): string {
@@ -130,6 +232,7 @@ export class GitlabAuth {
   private async store(box: SecretBox, userId: string, gl: GitlabUser, tokens: TokenResponse, requested: string): Promise<void> {
     const ts = now();
     const values = {
+      source: 'oauth',
       gitlab_id: String(gl.id),
       username: gl.username,
       name: gl.name ?? gl.username,

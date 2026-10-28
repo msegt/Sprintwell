@@ -255,4 +255,22 @@ export const migrations: Record<string, Migration> = {
       await db.schema.alterTable('team_gitlab').addColumn('issues_after', 'text').execute();
     },
   },
+
+  '007_gitlab_tokens_webhooks': {
+    async up(db: Kysely<any>) {
+      // How a GitLab identity was established: 'oauth', 'token' (the person proved it
+      // with a personal access token) or 'staff' (teaching staff set it).
+      await db.schema.alterTable('gitlab_accounts').addColumn('source', 'text', (c) => c.notNull().defaultTo('oauth')).execute();
+      // A project access token per team (encrypted), used for sync instead of personal OAuth access.
+      await db.schema.alterTable('team_gitlab').addColumn('token', 'text').execute();
+      await db.schema.alterTable('team_gitlab').addColumn('token_scopes', 'text').execute();
+      await db.schema.alterTable('team_gitlab').addColumn('token_expires_at', 'text').execute();
+      // Secret GitLab sends with webhooks (encrypted), and when one last arrived.
+      await db.schema.alterTable('team_gitlab').addColumn('webhook_secret', 'text').execute();
+      await db.schema.alterTable('team_gitlab').addColumn('webhook_at', 'text').execute();
+      // One backlog item per GitLab issue, even if two syncs run at once.
+      await db.schema.dropIndex('stories_gitlab_idx').execute();
+      await db.schema.createIndex('stories_gitlab_idx').unique().on('stories').columns(['team_id', 'gitlab_iid']).execute();
+    },
+  },
 };

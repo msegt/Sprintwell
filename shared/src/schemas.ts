@@ -194,7 +194,9 @@ export const activityQuery = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(100),
 });
 
-export const linkGitlabBody = z.object({ project: z.string().trim().min(3).max(300) });
+export const linkGitlabBody = z.object({ project: z.string().trim().min(3).max(300), token: z.string().trim().min(10).max(300).optional() });
+export const gitlabTokenBody = z.object({ token: z.string().trim().min(10).max(300) });
+export const staffGitlabBody = z.object({ username: z.string().trim().min(1).max(255) });
 
 export const deviceLinkRedeemBody = z.object({ code: z.string().trim().min(6).max(32) });
 

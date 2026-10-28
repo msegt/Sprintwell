@@ -2,6 +2,7 @@ import { LIMITS } from '@sprintwell/shared';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { GitlabButton } from '../components/GitlabButton';
+import { GitlabVerify } from '../components/GitlabVerify';
 import { Button, Field } from '../components/ui';
 import { api } from '../lib/api';
 import { useAction, useMe, usePageTitle } from '../lib/hooks';
@@ -49,26 +50,40 @@ export function JoinPage() {
   if (!preview || loading) return <div className="page narrow" aria-busy="true" />;
   const needsGitlab = preview.requireGitlab && !user?.gitlab;
 
+  const heading = (
+    <>
+      <p className="eyebrow">You are invited to join</p>
+      <h1>{preview.teamName}</h1>
+      <p className="muted">
+        {preview.className && <>Part of {preview.className}. </>}
+        {preview.memberCount} member{preview.memberCount === 1 ? '' : 's'} so far.
+      </p>
+    </>
+  );
+
+  if (needsGitlab) {
+    // Not inside a <form>: the verification has a form of its own.
+    return (
+      <div className="page narrow">
+        <section className="card stack" aria-label={`Join ${preview.teamName}`}>
+          {heading}
+          <p>
+            {preview.className} asks everyone to <strong>verify their GitLab account</strong> before joining, so that your contributions are linked to your GitLab account.
+          </p>
+          <div>
+            <GitlabButton returnTo={`/join/${code}`} variant="primary" />
+          </div>
+          <GitlabVerify submitLabel="Verify and continue" />
+          {!user && <p className="small muted">Your name in Sprintwell will be your name in GitLab; you can change it later on your profile.</p>}
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="page narrow">
       <form className="card" onSubmit={join}>
-        <p className="eyebrow">You are invited to join</p>
-        <h1>{preview.teamName}</h1>
-        <p className="muted">
-          {preview.className && <>Part of {preview.className}. </>}
-          {preview.memberCount} member{preview.memberCount === 1 ? '' : 's'} so far.
-        </p>
-        {needsGitlab ? (
-          <div className="stack">
-            <p>
-              {preview.className} asks everyone to <strong>sign in with GitLab</strong> before joining, so that your contributions are linked to your GitLab account.
-            </p>
-            <div>
-              <GitlabButton returnTo={`/join/${code}`} variant="primary" />
-            </div>
-          </div>
-        ) : (
-          <>
+        {heading}
         {user ? (
           <p>
             You will join as <strong>{user.displayName}</strong>
@@ -87,8 +102,6 @@ export function JoinPage() {
             <GitlabButton returnTo={`/join/${code}`}>{user ? 'Verify with GitLab first' : 'Sign in with GitLab instead'}</GitlabButton>
           )}
         </div>
-          </>
-        )}
         {!user && (
           <p className="small muted">
             Sprintwell remembers you on this device. Read the <Link to="/privacy">privacy notes</Link>.

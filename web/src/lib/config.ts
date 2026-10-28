@@ -6,7 +6,8 @@ export interface PublicConfig {
   version: string;
   donationUrl: string;
   sourceUrl: string;
-  gitlab: { enabled: boolean; url: string };
+  /** enabled: token verification, project tokens and webhooks; oauth: Sign in with GitLab as well. */
+  gitlab: { enabled: boolean; url: string; oauth: boolean };
 }
 
 let cached: Promise<PublicConfig> | null = null;

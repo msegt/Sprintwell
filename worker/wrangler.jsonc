@@ -30,9 +30,9 @@
     "DONATION_URL": "",
     "SOURCE_URL": "",
     "DISABLE_RATE_LIMIT": "",
-    // Sign in with GitLab (see docs/DEPLOY.md). Also run:
-    //   npx wrangler secret put GITLAB_CLIENT_SECRET
-    //   npx wrangler secret put SPRINTWELL_SECRET
+    // GitLab features (see docs/DEPLOY.md): set GITLAB_URL, e.g. "https://git.cardiff.ac.uk",
+    // and run: npx wrangler secret put SPRINTWELL_SECRET
+    // GITLAB_CLIENT_ID (plus the GITLAB_CLIENT_SECRET secret) only if your GitLab has an OAuth app for Sprintwell.
     "GITLAB_URL": "",
     "GITLAB_CLIENT_ID": ""
   },

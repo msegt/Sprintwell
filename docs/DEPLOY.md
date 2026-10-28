@@ -106,27 +106,33 @@ cd worker && npx wrangler dev --port 8787 --var DISABLE_RATE_LIMIT:1 \
 
 Add a Kysely migration in `server/src/db/migrations.ts` (used by the Node version), then run `npm run migration:generate -w worker`. It writes the matching D1 SQL file to `worker/migrations/` and never rewrites files that already exist. A test (`server/test/schema.test.ts`) fails if the two schemas differ.
 
-### Sign in with GitLab (optional)
+### GitLab (optional)
 
-Sign in with GitLab gives people a verified identity (useful when activity is used as evidence) and is needed for GitLab import and sync. It needs an OAuth application registered on your GitLab instance, for example `git.cardiff.ac.uk`.
+Sprintwell's GitLab features need only the address of your GitLab server and a secret; no OAuth application. This is the set-up for `git.cardiff.ac.uk`, where staff cannot register OAuth applications.
 
-1. In GitLab, open **Edit profile → Applications** (or a group's **Settings → Applications**, or ask the GitLab administrators for an instance-wide application) and add an application:
-   - Name: `Sprintwell`
-   - Redirect URI: `https://sprintwell.<your-subdomain>.workers.dev/auth/gitlab/callback` (your app's address followed by `/auth/gitlab/callback`)
-   - Confidential: yes
-   - Scopes: `read_user` and `api`. Sprintwell asks only for `read_user` when people sign in, and asks for `api` separately when someone chooses to allow GitLab access (needed for import and sync).
-2. In `worker/wrangler.jsonc`, set `GITLAB_URL` (e.g. `https://git.cardiff.ac.uk`) and `GITLAB_CLIENT_ID` (the Application ID) under `vars`.
-3. Store the two secrets (they never go in the repository):
+1. In `worker/wrangler.jsonc`, set `GITLAB_URL` under `vars` (e.g. `https://git.cardiff.ac.uk`).
+2. Store a secret that encrypts tokens in D1 (it never goes in the repository):
 
    ```bash
    cd worker
-   npx wrangler secret put GITLAB_CLIENT_SECRET   # the application's Secret
-   npx wrangler secret put SPRINTWELL_SECRET      # any long random text, e.g. from: openssl rand -base64 32
+   npx wrangler secret put SPRINTWELL_SECRET   # any long random text, e.g. from: openssl rand -base64 32
    ```
 
-4. Deploy again with `npm run deploy:cf`.
+3. Deploy again with `npm run deploy:cf`.
 
-`SPRINTWELL_SECRET` encrypts the GitLab tokens stored in D1. If you change it, people simply have to connect GitLab again. GitLab must be reachable from the internet (Cloudflare's servers call it), not only through a VPN. For the Node version, set the same four values as environment variables.
+What people then do, all inside Sprintwell:
+
+- **Verify their GitLab account.** On their profile (or when joining a class team that requires it), people create a personal access token with only the `read_user` scope and paste it. Sprintwell asks GitLab whose token it is, then deletes the token in GitLab; it is never stored. A fresh token also signs them in on another device. Teaching staff can instead set a student's GitLab username on the class page; a student's own verification always takes precedence.
+- **Link the team's project.** On the Team page, someone who owns or maintains the GitLab project creates a **project access token** (project Settings → Access tokens; role Developer; scope `api`, or `read_api` to only read; expiry at the end of term) and pastes it with the project address. Sprintwell stores it encrypted and uses it for sync. Changes Sprintwell makes in GitLab (estimates) appear there as made by the token's bot user.
+- **Optionally, add a webhook.** The Team page shows a webhook URL and secret to add under the project's Settings → Webhooks (push, comment, issue and merge request events). GitLab then tells Sprintwell about changes within seconds; Sprintwell treats a webhook only as a signal and reads the actual changes from GitLab's API with the team's token, so a forged webhook cannot add made-up activity.
+
+GitLab must be reachable from the internet (Cloudflare's servers call it), not only through a VPN. For webhooks, GitLab must also be allowed to call addresses on the internet; some institutions restrict this.
+
+`SPRINTWELL_SECRET` encrypts the project access tokens stored in D1. If you change it, teams have to add their tokens again.
+
+**Sign in with GitLab (OAuth), if your GitLab allows it.** Register an OAuth application on your GitLab (redirect URI: your app's address followed by `/auth/gitlab/callback`; confidential; scopes `read_user` and `api`), then also set `GITLAB_CLIENT_ID` under `vars` and `npx wrangler secret put GITLAB_CLIENT_SECRET`. People then get a "Sign in with GitLab" button as well.
+
+For the Node version, set the same values as environment variables.
 
 ## Option 2: Node server
 
@@ -152,13 +158,13 @@ The Node version keeps live event state in one process, so run a single instance
 | `SOURCE_URL` | (empty) | Link to the source code (AGPL) |
 | `LOG_LEVEL` | `info` | Fastify log level |
 | `PG_POOL_MAX` | `10` | Maximum PostgreSQL connections |
-| `GITLAB_URL` | (empty) | GitLab instance for Sign in with GitLab, e.g. `https://git.cardiff.ac.uk` |
-| `GITLAB_CLIENT_ID` | (empty) | OAuth Application ID |
-| `GITLAB_CLIENT_SECRET` | (empty) | OAuth application secret |
-| `SPRINTWELL_SECRET` | (empty) | Long random text that encrypts stored GitLab tokens (16+ characters) |
+| `GITLAB_URL` | (empty) | GitLab server for GitLab features, e.g. `https://git.cardiff.ac.uk` |
+| `SPRINTWELL_SECRET` | (empty) | Long random text that encrypts stored GitLab tokens (16+ characters); needed for GitLab features |
+| `GITLAB_CLIENT_ID` | (empty) | Optional: OAuth Application ID, for Sign in with GitLab |
+| `GITLAB_CLIENT_SECRET` | (empty) | Optional: OAuth application secret |
 
 ## Before using it with students
 
 Check your institution's rules for third-party tools that process student data. In the UK this often means a data protection impact assessment. On Cloudflare, the data sits in your Cloudflare account, in the region you chose when creating the D1 database. Whoever runs the service is responsible for the privacy notice.
 
-With classes, the activity log and GitLab sign-in, Sprintwell stores more about each student: their GitLab user id and username, encrypted GitLab tokens, and a timestamped log of what they did (including GitLab merge requests, reviews and commits once a team links its project). Teaching staff of a class can see and download all of it. Tell students before they join, explain how the log will (and will not) be used in assessment, and check whether your GitLab administrators allow third-party OAuth applications.
+With classes, the activity log and GitLab, Sprintwell stores more about each student: their GitLab user id and username, each team's encrypted project access token, and a timestamped log of what they did (including GitLab merge requests, reviews and commits once a team links its project). Teaching staff of a class can see and download all of it. Tell students before they join, explain how the log will (and will not) be used in assessment, and check whether your GitLab administrators allow third-party OAuth applications.

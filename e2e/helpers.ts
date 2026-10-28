@@ -40,3 +40,10 @@ export async function gitlabAs(user: { id: number; username: string; name: strin
   const r = await fetch(`${MOCK_GITLAB}/__mock/login`, { method: 'POST', body: JSON.stringify(user) });
   if (!r.ok) throw new Error('mock GitLab login failed');
 }
+
+/** Creates a GitLab access token in the mock GitLab: a personal one for a user, or a project access token. */
+export async function mockToken(opts: { user?: { id: number; username: string; name: string }; projectId?: number; scopes: string[]; expiresAt?: string }): Promise<string> {
+  const r = await fetch(`${MOCK_GITLAB}/__mock/token`, { method: 'POST', body: JSON.stringify(opts) });
+  if (!r.ok) throw new Error('mock GitLab token failed');
+  return ((await r.json()) as { token: string }).token;
+}
